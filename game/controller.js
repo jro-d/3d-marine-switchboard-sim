@@ -1,0 +1,850 @@
+import * as THREE from 'three';
+import {
+  STATIONS,
+  getStationById,
+  dampAngle,
+  normalizeAngle,
+  stepPlayerMovement,
+  findNearestInteractable,
+  getRecommendedTarget,
+  getStationActions,
+  isFullPpeState,
+} from './navigation.js';
+import { createSwitchroom } from './room.js';
+import { createEngineerCharacter } from './character.js';
+
+const TOOL_LABELS = {
+  none: 'Hands free',
+  racking_handle: 'Racking Crank',
+  castell_key: 'Castell Key',
+  padlock: 'LOTO Padlock',
+  proving_wand: '6.6 kV Proving Wand',
+  megger_leads: '5 kV Megger Leads',
+  cme_stick: 'CME Earth Hot-Stick',
+  ptw_clipboard: 'PTW Clipboard',
+};
+
+const _camGoalPos = new THREE.Vector3();
+const _camGoalLook = new THREE.Vector3();
+const _camCurLook = new THREE.Vector3(0, 1.25, 0);
+const _raycaster = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
+
+/**
+ * Initializes the Playable 3D Engineer Game Mode on top of the existing Three.js simulator.
+ */
+export function initSwitchroomGame(bridge) {
+  const { scene, camera, renderer, controls, plinthGroup, stageWrap } = bridge;
+
+  const room = createSwitchroom(renderer);
+  const character = createEngineerCharacter();
+
+  scene.add(room.root);
+  scene.add(character.root);
+  camera.add(character.fpGroup);
+  if (!camera.parent) scene.add(camera);
+
+  // Core game state
+  const game = {
+    appMode: 'game', // 'game' | 'classic'
+    cameraMode: 'third', // 'third' | 'first'
+    camYaw: Math.PI, // Math.PI faces -Z (toward the 5-bay switchboard)
+    camPitch: 0.24,
+    camDist: 2.85,
+    heldTool: 'none',
+    dockCollapsed: false,
+    nearbyStation: null,
+    player: {
+      x: 0.0,
+      z: 3.10,
+      yaw: Math.PI,
+      speed: 0,
+      walkCycle: 0,
+      targetPoint: null,
+      pendingStationId: null,
+      isBusy: false,
+    },
+    activeAnim: null, // { type, label, tool, elapsed, duration, commitAt, committed, onCommit }
+    input: {
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      sprint: false,
+    },
+    drag: {
+      active: false,
+      moved: false,
+      startX: 0,
+      startY: 0,
+      lastX: 0,
+      lastY: 0,
+    },
+    elapsed: 0,
+    lastHudKey: '',
+  };
+
+  character.root.position.set(game.player.x, 0, game.player.z);
+  character.root.rotation.y = game.player.yaw;
+
+  // Build Game Mode HUD inside stageWrap
+  const hud = document.createElement('div');
+  hud.id = 'hvGameHud';
+  hud.setAttribute('data-testid', 'game-hud');
+  hud.innerHTML = `
+    <div class="game-objective-card" role="region" aria-label="Mission objective">
+      <div class="game-obj-head">
+        <span class="game-obj-kicker" id="gameObjStep">Mission 01 · Step 0 / 6</span>
+        <span class="game-obj-meta" id="gameObjMode">Training</span>
+      </div>
+      <p class="game-obj-text" id="gameObjHint">Walk to the Port PPE Locker to don 40 cal/cm² PPE.</p>
+      <div class="game-obj-row">
+        <span class="game-ppe-readout" id="gamePpeStatus">PPE: 0/3 · Tool: Hands free</span>
+        <button type="button" class="game-dock-btn" id="btnWalkToNext">Walk to Target</button>
+      </div>
+    </div>
+
+    <div class="game-busy-bar" id="gameBusyBar" hidden aria-live="polite">
+      <div class="game-busy-label">
+        <span id="gameBusyText">Performing action...</span>
+        <span id="gameBusyPct">0%</span>
+      </div>
+      <div class="game-busy-track"><div class="game-busy-fill" id="gameBusyFill"></div></div>
+    </div>
+
+    <div class="game-fp-reticle" id="gameFpReticle" hidden aria-hidden="true"></div>
+
+    <div class="game-action-panel" id="gameActionPanel" hidden role="region" aria-label="Nearby station actions">
+      <div class="game-station-head">
+        <span class="game-station-title" id="gameStationTitle">Station</span>
+        <span class="game-station-state" id="gameStationState"></span>
+      </div>
+      <div class="game-action-list" id="gameActionList"></div>
+    </div>
+
+    <div class="game-dock-wrap" id="gameDockWrap">
+      <button type="button" class="game-dock-toggle" id="btnToggleGameDock" aria-expanded="true">▾ Hide Controls [H]</button>
+      <div class="game-bottom-dock" role="toolbar" aria-label="Switchroom game controls">
+        <div class="game-dock-group">
+          <button type="button" class="game-dock-btn active" id="btnCamThird" aria-pressed="true">3rd Person</button>
+          <button type="button" class="game-dock-btn" id="btnCamFirst" aria-pressed="false">1st Person [V]</button>
+        </div>
+        <span class="game-dock-sep" aria-hidden="true"></span>
+        <div class="game-dock-group" aria-label="Walk to room station">
+          <button type="button" class="game-dock-btn" data-walk-station="station:ppe">PPE Locker</button>
+          <button type="button" class="game-dock-btn" data-walk-station="station:keys">Key Board</button>
+          <button type="button" class="game-dock-btn" data-walk-station="station:test">Test Bench</button>
+          <button type="button" class="game-dock-btn" data-walk-station="station:permit">Permit Desk</button>
+        </div>
+        <span class="game-dock-sep" aria-hidden="true"></span>
+        <div class="game-dock-group" aria-label="Walk to switchboard bay">
+          <button type="button" class="game-dock-btn" data-walk-station="bay:DG1">C1</button>
+          <button type="button" class="game-dock-btn" data-walk-station="bay:BT1">C2</button>
+          <button type="button" class="game-dock-btn" data-walk-station="bay:BT-M1">C3</button>
+          <button type="button" class="game-dock-btn" data-walk-station="bay:TR1-HV">C4</button>
+          <button type="button" class="game-dock-btn" data-walk-station="bay:ACB-TR1-LV">C5</button>
+        </div>
+        <span class="game-dock-sep" aria-hidden="true"></span>
+        <span class="game-dock-meta">WASD · Click · Drag · E</span>
+      </div>
+    </div>
+  `;
+  stageWrap.appendChild(hud);
+
+  const elObjStep = hud.querySelector('#gameObjStep');
+  const elObjMode = hud.querySelector('#gameObjMode');
+  const elObjHint = hud.querySelector('#gameObjHint');
+  const elPpeStatus = hud.querySelector('#gamePpeStatus');
+  const btnWalkToNext = hud.querySelector('#btnWalkToNext');
+  const elBusyBar = hud.querySelector('#gameBusyBar');
+  const elBusyText = hud.querySelector('#gameBusyText');
+  const elBusyPct = hud.querySelector('#gameBusyPct');
+  const elBusyFill = hud.querySelector('#gameBusyFill');
+  const elFpReticle = hud.querySelector('#gameFpReticle');
+  const elActionPanel = hud.querySelector('#gameActionPanel');
+  const elStationTitle = hud.querySelector('#gameStationTitle');
+  const elStationState = hud.querySelector('#gameStationState');
+  const elActionList = hud.querySelector('#gameActionList');
+  const elDockWrap = hud.querySelector('#gameDockWrap');
+  const btnToggleDock = hud.querySelector('#btnToggleGameDock');
+  const btnCamThird = hud.querySelector('#btnCamThird');
+  const btnCamFirst = hud.querySelector('#btnCamFirst');
+
+  // Top bar mode switch buttons (added in index.html)
+  const btnModeGame = document.getElementById('btnAppModeGame');
+  const btnModeClassic = document.getElementById('btnAppModeClassic');
+
+  function setCameraMode(mode) {
+    game.cameraMode = mode === 'first' ? 'first' : 'third';
+    const isFirst = game.cameraMode === 'first';
+    character.setFirstPersonMode(isFirst);
+    elFpReticle.hidden = !isFirst;
+    btnCamThird.classList.toggle('active', !isFirst);
+    btnCamThird.setAttribute('aria-pressed', String(!isFirst));
+    btnCamFirst.classList.toggle('active', isFirst);
+    btnCamFirst.setAttribute('aria-pressed', String(isFirst));
+    document.body.dataset.cameraMode = game.cameraMode;
+    if (isFirst) {
+      game.camYaw = game.player.yaw;
+      game.camPitch = 0.04;
+    } else {
+      game.camPitch = 0.24;
+    }
+  }
+
+  function setAppMode(mode) {
+    game.appMode = mode === 'classic' ? 'classic' : 'game';
+    const isGame = game.appMode === 'game';
+    window.__HV_GAME_MODE__ = isGame;
+    document.body.dataset.appMode = game.appMode;
+
+    if (btnModeGame) {
+      btnModeGame.classList.toggle('active', isGame);
+      btnModeGame.setAttribute('aria-pressed', String(isGame));
+    }
+    if (btnModeClassic) {
+      btnModeClassic.classList.toggle('active', !isGame);
+      btnModeClassic.setAttribute('aria-pressed', String(!isGame));
+    }
+
+    room.root.visible = isGame;
+    character.root.visible = isGame;
+    character.fpGroup.visible = isGame && game.cameraMode === 'first';
+    plinthGroup.visible = !isGame;
+    controls.enabled = !isGame;
+
+    if (isGame) {
+      // Ensure 3D Twin view is visible & explode is assembled
+      if (bridge.getSim().viewMode !== '3D') {
+        bridge.getSim().viewMode = '3D';
+        bridge.render();
+      }
+      bridge.setExplodePct(0, false);
+      bridge.setIsolatedPart('all');
+      scene.background.setHex(0xd4dce4);
+      scene.fog = new THREE.Fog(0xd4dce4, 7.5, 19.5);
+      camera.fov = 52;
+      camera.updateProjectionMatrix();
+      snapCameraImmediate();
+      game.lastHudKey = '';
+      refreshHud(true);
+    } else {
+      scene.background.setHex(0xf1f3f6);
+      scene.fog = null;
+      camera.fov = 38;
+      camera.updateProjectionMatrix();
+      camera.position.set(0.0, 1.85, 5.30);
+      controls.target.set(0.0, 1.08, 0.0);
+      controls.update();
+      bridge.applyCameraPreset('lineup');
+    }
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+
+  function snapCameraImmediate() {
+    if (game.cameraMode === 'first') {
+      camera.position.set(game.player.x, 1.62, game.player.z);
+      _camCurLook.set(
+        game.player.x + Math.sin(game.camYaw) * 2.0,
+        1.62 - Math.sin(game.camPitch) * 2.0,
+        game.player.z + Math.cos(game.camYaw) * 2.0
+      );
+      camera.lookAt(_camCurLook);
+    } else {
+      const dist = game.camDist;
+      camera.position.set(
+        game.player.x - Math.sin(game.camYaw) * dist * Math.cos(game.camPitch),
+        1.48 + Math.sin(game.camPitch) * dist,
+        game.player.z - Math.cos(game.camYaw) * dist * Math.cos(game.camPitch)
+      );
+      _camCurLook.set(game.player.x, 1.32, game.player.z);
+      camera.lookAt(_camCurLook);
+    }
+  }
+
+  function walkToStation(stationId) {
+    const st = getStationById(stationId);
+    if (!st) return;
+    if (game.activeAnim) return;
+    game.player.targetPoint = { x: st.anchor.x, z: st.anchor.z, faceYaw: st.faceYaw };
+    game.player.pendingStationId = st.id;
+    room.showWalkMarker(st.anchor.x, st.anchor.z);
+    if (st.kind === 'bay' && st.cubId) {
+      bridge.selectCubicle(st.cubId);
+    }
+  }
+
+  function executeBridgeAction(action) {
+    const sim = bridge.getSim();
+    const prevScore = sim.score;
+
+    switch (action.exec) {
+      case 'donAllPpe':
+        sim.ppe = { suit: true, glovesAirTested: true, gloves: true, bootsMat: true };
+        bridge.AudioEngine.playPiezo(false);
+        bridge.logEvent('ETO donned full 40 cal/cm² PPE, air-tested Class 2 gloves & deployed 15 kV mat.', 'safe');
+        bridge.render();
+        break;
+      case 'rollTestGloves':
+        sim.ppe.glovesAirTested = true;
+        bridge.AudioEngine.playPiezo(false);
+        bridge.logEvent('Class 2 HV gloves pneumatic roll air-test passed at PPE Locker.', 'safe');
+        bridge.render();
+        break;
+      case 'toggleSuit':
+        sim.ppe.suit = !sim.ppe.suit;
+        bridge.AudioEngine.playRatchet();
+        bridge.render();
+        break;
+      case 'toggleGloves':
+        if (!sim.ppe.glovesAirTested && !sim.ppe.gloves) {
+          document.getElementById('btnDonGloves')?.click();
+        } else {
+          sim.ppe.gloves = !sim.ppe.gloves;
+          bridge.AudioEngine.playRatchet();
+          bridge.render();
+        }
+        break;
+      case 'toggleBootsMat':
+        sim.ppe.bootsMat = !sim.ppe.bootsMat;
+        bridge.AudioEngine.playClunk(90);
+        bridge.render();
+        break;
+      case 'toggleKeyBox':
+        bridge.toggleSafetyKeyBox();
+        break;
+      case 'equipTool':
+        game.heldTool = action.arg || 'none';
+        character.setHeldTool(game.heldTool);
+        bridge.AudioEngine.playRatchet();
+        break;
+      case 'equipSimTool':
+        sim.activeTool = action.arg || 'HAND';
+        game.heldTool = action.tool || 'cme_stick';
+        character.setHeldTool(game.heldTool);
+        bridge.AudioEngine.playRatchet();
+        bridge.render();
+        break;
+      case 'proveUnit':
+        sim.activeTool = 'VOLTAGE_TESTER';
+        bridge.proveTesterOnUnit();
+        break;
+      case 'connectMegger':
+        bridge.connectMegger();
+        break;
+      case 'runMegger':
+        bridge.runMegger();
+        break;
+      case 'dischargeMegger':
+        bridge.dischargeMegger();
+        break;
+      case 'issuePTW':
+        bridge.issuePTW();
+        break;
+      case 'cancelPTW':
+        bridge.cancelPTW();
+        break;
+      case 'issueSFT':
+        bridge.issueSFT();
+        break;
+      case 'cancelSFT':
+        bridge.cancelSFT();
+        break;
+      case 'openPtwModal':
+        document.getElementById('btnFullPtwView')?.click();
+        break;
+      case 'tripVcb':
+        bridge.pressTripVCB(action.arg);
+        break;
+      case 'closeVcb':
+        bridge.pressCloseVCB(action.arg);
+        break;
+      case 'rackOut':
+        bridge.rackVCB(action.arg, -10);
+        break;
+      case 'rackIn':
+        bridge.rackVCB(action.arg, 10);
+        break;
+      case 'toggleRackingPadlock':
+        bridge.toggleRackingPadlock(action.arg);
+        break;
+      case 'toggleCastellVcb':
+        bridge.toggleCastellVCBLock(action.arg);
+        break;
+      case 'toggleEarthKey':
+        bridge.toggleEarthSwitchKey(action.arg.cubId, action.arg.keyId);
+        break;
+      case 'toggleEarthSwitch':
+        bridge.toggleIntegralEarthSwitch(action.arg);
+        break;
+      case 'toggleEarthPadlock':
+        bridge.toggleEarthPadlock(action.arg);
+        break;
+      case 'toggleDoor':
+        bridge.toggleDoor3D(action.arg);
+        break;
+      case 'toggleShutterPadlock':
+        bridge.toggleShutterPadlock(action.arg);
+        break;
+      case 'probePhases':
+        sim.activeTool = 'VOLTAGE_TESTER';
+        bridge.interactTerminal(action.arg, 'L1');
+        bridge.interactTerminal(action.arg, 'L2');
+        bridge.interactTerminal(action.arg, 'L3');
+        break;
+      case 'applyCme':
+        sim.activeTool = 'PORTABLE_EARTH';
+        bridge.interactTerminal(action.arg, 'PE');
+        bridge.interactTerminal(action.arg, 'L1');
+        bridge.interactTerminal(action.arg, 'L2');
+        bridge.interactTerminal(action.arg, 'L3');
+        break;
+      case 'removeCme':
+        sim.activeTool = 'PORTABLE_EARTH';
+        bridge.interactTerminal(action.arg, 'L1');
+        bridge.interactTerminal(action.arg, 'L2');
+        bridge.interactTerminal(action.arg, 'L3');
+        bridge.interactTerminal(action.arg, 'PE');
+        break;
+    }
+
+    // If an interlock violation occurred (score dropped), trigger defensive recoil animation!
+    if (sim.score < prevScore) {
+      game.activeAnim = {
+        type: 'recoil',
+        label: 'Interlock Blocked — Step Back',
+        tool: 'none',
+        elapsed: 0,
+        duration: 0.72,
+        commitAt: 2,
+        committed: true,
+        onCommit: null,
+      };
+      character.setHeldTool('none');
+    }
+  }
+
+  function startAnimatedAction(action, station) {
+    if (!action || game.activeAnim) return;
+    if (station) {
+      game.player.yaw = station.faceYaw;
+      if (station.kind === 'bay' && station.cubId) {
+        bridge.selectCubicle(station.cubId);
+      }
+    }
+
+    game.player.targetPoint = null;
+    game.player.isBusy = true;
+    game.heldTool = action.tool || 'none';
+    character.setHeldTool(game.heldTool);
+
+    game.activeAnim = {
+      type: action.anim || 'push_button',
+      label: action.label,
+      tool: game.heldTool,
+      elapsed: 0,
+      duration: action.duration || 0.95,
+      commitAt: (action.duration || 0.95) * 0.56,
+      committed: false,
+      onCommit: () => executeBridgeAction(action),
+    };
+
+    elBusyBar.hidden = false;
+    elBusyText.textContent = action.label;
+    elBusyPct.textContent = '0%';
+    elBusyFill.style.width = '0%';
+  }
+
+  function getStationStatusSummary(st, sim, topo) {
+    if (!st) return '';
+    if (st.id === 'station:ppe') {
+      const n = (sim.ppe.suit ? 1 : 0) + (sim.ppe.gloves ? 1 : 0) + (sim.ppe.bootsMat ? 1 : 0);
+      return `PPE ${n}/3 · Gloves ${sim.ppe.glovesAirTested ? 'Air-Tested' : 'Untested'}`;
+    }
+    if (st.id === 'station:keys') {
+      return `Key Box: ${sim.keyBoxLocked ? 'LOCKED' : 'OPEN'}`;
+    }
+    if (st.id === 'station:test') {
+      const ptpText = sim.ptp.state === 1 ? 'Wand Proved (1/3)' : sim.ptp.state === 2 ? 'Re-Prove Needed' : 'Ready';
+      return sim.megger.tested ? `PI ${sim.megger.piRatio} · ${sim.megger.windingChargeVolts} V` : `Proving Unit: ${ptpText}`;
+    }
+    if (st.id === 'station:permit') {
+      return sim.ptw.active ? 'PTW ACTIVE' : sim.sft.active ? 'SFT ACTIVE' : sim.ptw.cancelled ? 'PTW CANCELLED' : 'NO PERMIT ISSUED';
+    }
+    const cub = sim.cubicles[st.cubId];
+    if (!cub) return '';
+    const vcb = cub.vcbClosed ? 'CLOSED' : 'OPEN';
+    const truck = cub.isHV ? ` · Truck ${cub.rackingTurns}/20` : '';
+    const earth = cub.earthSwitchClosed ? ' · EARTHED' : '';
+    return `${vcb}${truck}${earth}`;
+  }
+
+  let currentStationActions = [];
+
+  function refreshHud(force = false) {
+    if (game.appMode !== 'game') return;
+    const sim = bridge.getSim();
+    const topo = bridge.getTopology();
+    const steps = bridge.getLotoSteps();
+    const doneCount = steps.filter((s) => s.done).length;
+    const rec = getRecommendedTarget(sim);
+    const st = game.nearbyStation;
+    const ppeCount = (sim.ppe.suit ? 1 : 0) + (sim.ppe.gloves ? 1 : 0) + (sim.ppe.bootsMat ? 1 : 0);
+    const cub = st?.cubId ? sim.cubicles[st.cubId] : null;
+
+    const hudKey = JSON.stringify([
+      sim.missionId,
+      sim.mode,
+      doneCount,
+      steps.length,
+      ppeCount,
+      sim.ppe.glovesAirTested,
+      sim.keyBoxLocked,
+      sim.ptp.state,
+      sim.ptw.active,
+      sim.ptw.cancelled,
+      sim.sft.active,
+      sim.sft.cancelledAfterTest,
+      sim.megger.connectedCubicle,
+      sim.megger.tested,
+      sim.megger.windingChargeVolts,
+      game.heldTool,
+      st?.id || null,
+      rec.stationId,
+      cub ? [cub.vcbClosed, cub.rackingTurns, cub.rackingPadlocked, cub.castellLockedOut, cub.earthSwitchClosed, cub.earthPadlocked, cub.earthKeysInserted.join(','), cub.doorOpen, cub.topShutterPadlocked, cub.cme.pe, cub.cme.L1, cub.cme.L2, cub.cme.L3] : null,
+    ]);
+
+    if (!force && hudKey === game.lastHudKey) return;
+    game.lastHudKey = hudKey;
+
+    elObjStep.textContent = `Mission 0${sim.missionId} · Step ${doneCount} / ${steps.length}`;
+    elObjMode.textContent = sim.mode === 'EXAM' ? 'Exam Mode' : 'Training Mode';
+    elObjHint.textContent = sim.mode === 'EXAM'
+      ? 'Execute STCW switching & LOTO procedure across the switchroom unassisted.'
+      : rec.hint;
+    btnWalkToNext.hidden = sim.mode === 'EXAM';
+    btnWalkToNext.dataset.targetStation = rec.stationId;
+
+    elPpeStatus.textContent = `PPE: ${ppeCount}/3 · Tool: ${TOOL_LABELS[game.heldTool] || 'Hands free'}`;
+    elPpeStatus.classList.toggle('ok', isFullPpeState(sim.ppe));
+
+    // Sync active dock station highlight
+    hud.querySelectorAll('[data-walk-station]').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.walkStation === st?.id);
+    });
+
+    if (!st) {
+      elActionPanel.hidden = true;
+      currentStationActions = [];
+      return;
+    }
+
+    elActionPanel.hidden = false;
+    elStationTitle.textContent = st.label;
+    elStationState.textContent = getStationStatusSummary(st, sim, topo);
+
+    currentStationActions = getStationActions(st.id, sim, topo);
+    elActionList.innerHTML = '';
+
+    currentStationActions.forEach((act, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `game-act-btn${act.primary ? ' primary' : ''}${act.done ? ' done' : ''}`;
+      const keyLabel = idx === 0 ? 'E' : String(idx + 1);
+      btn.innerHTML = `<span class="game-act-key">${keyLabel}</span><span>${act.label}</span>`;
+      btn.addEventListener('click', () => startAnimatedAction(act, st));
+      elActionList.appendChild(btn);
+    });
+  }
+
+  // Wire HUD buttons
+  btnWalkToNext.addEventListener('click', () => {
+    const targetId = btnWalkToNext.dataset.targetStation;
+    if (targetId) walkToStation(targetId);
+  });
+
+  btnCamThird.addEventListener('click', () => setCameraMode('third'));
+  btnCamFirst.addEventListener('click', () => setCameraMode('first'));
+
+  btnToggleDock.addEventListener('click', () => {
+    game.dockCollapsed = !game.dockCollapsed;
+    elDockWrap.classList.toggle('collapsed', game.dockCollapsed);
+    btnToggleDock.setAttribute('aria-expanded', String(!game.dockCollapsed));
+    btnToggleDock.textContent = game.dockCollapsed ? '▴ Show Controls [H]' : '▾ Hide Controls [H]';
+  });
+
+  hud.querySelectorAll('[data-walk-station]').forEach((btn) => {
+    btn.addEventListener('click', () => walkToStation(btn.dataset.walkStation));
+  });
+
+  if (btnModeGame) btnModeGame.addEventListener('click', () => setAppMode('game'));
+  if (btnModeClassic) btnModeClassic.addEventListener('click', () => setAppMode('classic'));
+
+  // Keyboard controls (WASD / Arrows / Shift / E / 1-6 / V / G / H)
+  window.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+    if (document.querySelector('dialog[open]')) return;
+
+    const k = e.key.toLowerCase();
+    if (k === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      setAppMode(game.appMode === 'game' ? 'classic' : 'game');
+      return;
+    }
+
+    if (game.appMode !== 'game') return;
+
+    if (k === 'w' || e.key === 'ArrowUp') { game.input.forward = true; e.preventDefault(); }
+    else if (k === 's' || e.key === 'ArrowDown') { game.input.backward = true; e.preventDefault(); }
+    else if (k === 'a' || e.key === 'ArrowLeft') { game.input.left = true; e.preventDefault(); }
+    else if (k === 'd' || e.key === 'ArrowRight') { game.input.right = true; e.preventDefault(); }
+    else if (e.key === 'Shift') { game.input.sprint = true; }
+    else if (k === 'v') {
+      e.preventDefault();
+      setCameraMode(game.cameraMode === 'third' ? 'first' : 'third');
+    } else if (k === 'h') {
+      e.preventDefault();
+      btnToggleDock.click();
+    } else if (k === 'e') {
+      if (game.nearbyStation && currentStationActions.length > 0) {
+        e.preventDefault();
+        const primary = currentStationActions.find((a) => a.primary) || currentStationActions[0];
+        startAnimatedAction(primary, game.nearbyStation);
+      }
+    } else if (k >= '1' && k <= '6') {
+      const idx = Number(k) - 1;
+      if (game.nearbyStation && currentStationActions[idx]) {
+        e.preventDefault();
+        startAnimatedAction(currentStationActions[idx], game.nearbyStation);
+      }
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || e.key === 'ArrowUp') game.input.forward = false;
+    else if (k === 's' || e.key === 'ArrowDown') game.input.backward = false;
+    else if (k === 'a' || e.key === 'ArrowLeft') game.input.left = false;
+    else if (k === 'd' || e.key === 'ArrowRight') game.input.right = false;
+    else if (e.key === 'Shift') game.input.sprint = false;
+  });
+
+  window.addEventListener('blur', () => {
+    game.input.forward = game.input.backward = game.input.left = game.input.right = game.input.sprint = false;
+    game.drag.active = false;
+  });
+
+  // Pointer drag look + click-to-walk / click-station interaction on WebGL canvas
+  const domEl = renderer.domElement;
+
+  domEl.addEventListener('pointerdown', (e) => {
+    if (game.appMode !== 'game') return;
+    game.drag.active = true;
+    game.drag.moved = false;
+    game.drag.startX = e.clientX;
+    game.drag.startY = e.clientY;
+    game.drag.lastX = e.clientX;
+    game.drag.lastY = e.clientY;
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (game.appMode !== 'game' || !game.drag.active) return;
+    const dx = e.clientX - game.drag.lastX;
+    const dy = e.clientY - game.drag.lastY;
+    game.drag.lastX = e.clientX;
+    game.drag.lastY = e.clientY;
+
+    if (Math.hypot(e.clientX - game.drag.startX, e.clientY - game.drag.startY) > 6) {
+      game.drag.moved = true;
+    }
+
+    if (game.drag.moved) {
+      game.camYaw = normalizeAngle(game.camYaw - dx * 0.0065);
+      const minPitch = game.cameraMode === 'first' ? -0.45 : 0.05;
+      const maxPitch = game.cameraMode === 'first' ? 0.55 : 0.78;
+      game.camPitch = THREE.MathUtils.clamp(game.camPitch + dy * 0.005, minPitch, maxPitch);
+      if (game.cameraMode === 'first') {
+        game.player.yaw = game.camYaw;
+      }
+    }
+  });
+
+  domEl.addEventListener('pointerup', (e) => {
+    if (game.appMode !== 'game') return;
+    const wasMoved = game.drag.moved;
+    game.drag.active = false;
+    if (wasMoved) return;
+
+    const rect = domEl.getBoundingClientRect();
+    _ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    _ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    _raycaster.setFromCamera(_ndc, camera);
+
+    const hits = _raycaster.intersectObjects(room.clickProxies, false);
+    if (hits.length === 0) return;
+
+    // Prefer clicking a station/bay proxy over floor
+    const stationHit = hits.find((h) => h.object.userData.stationId);
+    if (stationHit) {
+      walkToStation(stationHit.object.userData.stationId);
+      return;
+    }
+
+    const floorHit = hits.find((h) => h.object.userData.walkFloor);
+    if (floorHit && !game.activeAnim) {
+      const pt = floorHit.point;
+      game.player.targetPoint = { x: pt.x, z: pt.z };
+      game.player.pendingStationId = null;
+      room.showWalkMarker(pt.x, pt.z);
+    }
+  });
+
+  domEl.addEventListener('wheel', (e) => {
+    if (game.appMode !== 'game' || game.cameraMode !== 'third') return;
+    e.preventDefault();
+    game.camDist = THREE.MathUtils.clamp(game.camDist + Math.sign(e.deltaY) * 0.25, 1.75, 4.8);
+  }, { passive: false });
+
+  // Main per-frame update hook invoked from index.html's render loop
+  function tick(dt) {
+    if (game.appMode !== 'game') return;
+    const clampedDt = Math.min(Math.max(dt, 0.001), 0.14);
+    game.elapsed += clampedDt;
+
+    const sim = bridge.getSim();
+
+    // 1. Update active procedural task animation
+    if (game.activeAnim) {
+      const anim = game.activeAnim;
+      anim.elapsed += clampedDt;
+      const pct = Math.min(100, Math.round((anim.elapsed / anim.duration) * 100));
+      elBusyPct.textContent = `${pct}%`;
+      elBusyFill.style.width = `${pct}%`;
+
+      if (!anim.committed && anim.elapsed >= anim.commitAt) {
+        anim.committed = true;
+        if (typeof anim.onCommit === 'function') anim.onCommit();
+      }
+
+      if (anim.elapsed >= anim.duration) {
+        game.activeAnim = null;
+        game.player.isBusy = false;
+        elBusyBar.hidden = true;
+        refreshHud(true);
+      }
+    }
+
+    // 2. Step hybrid WASD + click-to-walk locomotion
+    const nextPlayer = stepPlayerMovement(
+      game.player,
+      { ...game.input, cameraYaw: game.camYaw },
+      clampedDt
+    );
+    game.player = nextPlayer;
+
+    // 3. Detect nearby station & update selected bay in simulator
+    const near = findNearestInteractable(game.player.x, game.player.z);
+    if (near?.id !== game.nearbyStation?.id) {
+      game.nearbyStation = near;
+      if (near?.kind === 'bay' && near.cubId && sim.selectedCubicle !== near.cubId) {
+        bridge.selectCubicle(near.cubId);
+      }
+      refreshHud(true);
+    }
+
+    // If arrived at a clicked station, orient cleanly toward it
+    if (game.player.arrived && game.player.pendingStationId) {
+      const st = getStationById(game.player.pendingStationId);
+      if (st) {
+        game.player.yaw = st.faceYaw;
+        if (game.cameraMode === 'first') game.camYaw = st.faceYaw;
+      }
+      game.player.pendingStationId = null;
+    }
+
+    // 4. Sync character transform, PPE visuals & procedural skeletal pose
+    character.root.position.set(game.player.x, 0, game.player.z);
+    character.root.rotation.y = game.player.yaw;
+    character.setPpeVisuals(sim.ppe);
+    character.updatePose({
+      speed: game.player.speed,
+      walkCycle: game.player.walkCycle,
+      elapsed: game.elapsed,
+      anim: game.activeAnim,
+    });
+
+    // 5. Sync physical room props & guidance waypoint
+    const rec = getRecommendedTarget(sim);
+    room.syncRoomState(sim, rec.stationId, clampedDt, game.elapsed);
+
+    // 6. Smooth 3rd-person or 1st-person camera rig
+    if (game.cameraMode === 'first') {
+      _camGoalPos.set(game.player.x, 1.62, game.player.z);
+      camera.position.lerp(_camGoalPos, 1 - Math.exp(-16 * clampedDt));
+      _camGoalLook.set(
+        game.player.x + Math.sin(game.camYaw) * 2.4,
+        1.62 - Math.sin(game.camPitch) * 2.0,
+        game.player.z + Math.cos(game.camYaw) * 2.4
+      );
+      _camCurLook.lerp(_camGoalLook, 1 - Math.exp(-16 * clampedDt));
+      camera.lookAt(_camCurLook);
+    } else {
+      const dist = game.camDist;
+      // Clamp camera inside room bulkheads so walls never clip the view
+      const rawX = game.player.x - Math.sin(game.camYaw) * dist * Math.cos(game.camPitch);
+      const rawZ = game.player.z - Math.cos(game.camYaw) * dist * Math.cos(game.camPitch);
+      const rawY = 1.48 + Math.sin(game.camPitch) * dist;
+
+      _camGoalPos.set(
+        THREE.MathUtils.clamp(rawX, -3.95, 3.95),
+        THREE.MathUtils.clamp(rawY, 1.05, 3.05),
+        THREE.MathUtils.clamp(rawZ, 0.55, 5.45)
+      );
+      camera.position.lerp(_camGoalPos, 1 - Math.exp(-10 * clampedDt));
+
+      _camGoalLook.set(
+        game.player.x + Math.sin(game.camYaw) * 0.45,
+        1.32,
+        game.player.z + Math.cos(game.camYaw) * 0.45
+      );
+      _camCurLook.lerp(_camGoalLook, 1 - Math.exp(-12 * clampedDt));
+      camera.lookAt(_camCurLook);
+    }
+
+    refreshHud(false);
+  }
+
+  // Allow Mission resets to reposition HUD & keep player standing ready
+  const origInitMission = bridge.initMission;
+  if (typeof origInitMission === 'function') {
+    window.__HV_ON_MISSION_RESET__ = () => {
+      game.activeAnim = null;
+      game.player.isBusy = false;
+      elBusyBar.hidden = true;
+      game.lastHudKey = '';
+      refreshHud(true);
+    };
+  }
+
+  // Expose lightweight runtime handle for verification & debugging
+  window.__HV_GAME__ = {
+    setAppMode,
+    setCameraMode,
+    walkToStation,
+    getState: () => ({
+      appMode: game.appMode,
+      cameraMode: game.cameraMode,
+      player: { x: Number(game.player.x.toFixed(2)), z: Number(game.player.z.toFixed(2)), yaw: Number(game.player.yaw.toFixed(2)) },
+      nearbyStation: game.nearbyStation?.id || null,
+      heldTool: game.heldTool,
+      isBusy: game.player.isBusy,
+    }),
+  };
+
+  // Start in Game Mode (or Classic if ?mode=classic)
+  const params = new URLSearchParams(window.location.search);
+  setCameraMode(params.get('cam') === 'first' ? 'first' : 'third');
+  setAppMode(params.get('mode') === 'classic' ? 'classic' : 'game');
+
+  return { tick, setAppMode, setCameraMode };
+}

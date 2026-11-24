@@ -1,0 +1,17 @@
+{
+  "name": "marine-hv-simulator-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Marine HV 6.6 kV Switchboard — 3D Digital Twin, Switching & Permit-to-Work Simulator",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "node -e \"import('node:fs').then(fs => { for (const f of ['index.html', 'server.js', 'game/navigation.js', 'game/room.js', 'game/character.js', 'game/controller.js', 'game/game.css', 'design-system/fonts.css', 'design-system/tokens.css', 'design-system/components.css']) { if (!fs.existsSync(f)) throw new Error('Missing required file: ' + f); } console.log('All static & game modules verified.'); })\"",
+    "lint": "node --check server.js && node --check game/navigation.js && node --check game/room.js && node --check game/character.js && node --check game/controller.js",
+    "test": "node --test server.test.mjs game/navigation.test.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
