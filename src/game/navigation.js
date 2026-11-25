@@ -183,7 +183,6 @@ export function resolveCollision(x, z, radius = PLAYER_RADIUS) {
           rx += (dx / dist) * push;
           rz += (dz / dist) * push;
         } else {
-          // Inside AABB: push out along shallowest axis
           const penLeft = Math.abs(rx - box.minX);
           const penRight = Math.abs(box.maxX - rx);
           const penTop = Math.abs(rz - box.minZ);
@@ -224,13 +223,10 @@ export function stepPlayerMovement(player, input, dt) {
   let arrived = false;
 
   if (hasManualInput) {
-    // Manual WASD cancels auto-walk
     targetPoint = null;
     const camYaw = input.cameraYaw ?? Math.PI;
-    // Forward vector along camera look direction on XZ plane: (sin(camYaw), cos(camYaw))
     const fwdX = Math.sin(camYaw);
     const fwdZ = Math.cos(camYaw);
-    // Right vector perpendicular to forward: (-cos(camYaw), sin(camYaw))
     const rightX = -Math.cos(camYaw);
     const rightZ = Math.sin(camYaw);
 
@@ -307,7 +303,6 @@ export function isFullPpeState(ppe) {
 
 /**
  * Compute the exact recommended physical room station / bay for the active mission step.
- * Powers the 3D floor guidance beacon and "Walk to Next Step" helper in Training Mode.
  */
 export function getRecommendedTarget(sim) {
   if (!sim || !sim.cubicles || !sim.cubicles['BT-M1']) {
@@ -344,7 +339,7 @@ export function getRecommendedTarget(sim) {
       if (sim.ptp.state === 0 || sim.ptp.state === 2) {
         return { stationId: 'station:test', hint: 'Walk to the Proving Bench to verify the HV proving wand on the Proving Unit' };
       }
-      return { stationId: 'bay:BT-M1', hint: 'Return to C3 (BT-M1) and probe L1, L2, L3 cable terminals dead' };
+      return { stationId: 'bay:BT-M1', hint: 'Return to C3 (BT-M1) and probe L1, L2, L3 terminals dead' };
     }
     if (!sim.ptw.active) {
       return { stationId: 'station:permit', hint: 'Walk to the Starboard Permit Desk to sign & issue the PTW' };
@@ -405,7 +400,6 @@ export function getRecommendedTarget(sim) {
     return { stationId: 'station:permit', hint: 'Mission 03 Complete — 5 kV Megger & PI test verified!' };
   }
 
-  // Mission 4: De-Isolation & Safe Restoration
   const cmeClean = !bt.cme.pe && !bt.cme.L1 && !bt.cme.L2 && !bt.cme.L3 && bt.cme.removedProperly;
   if (!sim.ptw.cancelled) {
     return { stationId: 'station:permit', hint: 'Walk to the Permit Desk to sign off & cancel PTW' };
@@ -434,7 +428,7 @@ export function getRecommendedTarget(sim) {
 /**
  * Build contextual animated actions available when the character stands at a given station or bay.
  */
-export function getStationActions(stationId, sim, topo) {
+export function getStationActions(stationId, sim) {
   if (!stationId || !sim) return [];
 
   if (stationId === 'station:ppe') {
@@ -636,7 +630,6 @@ export function getStationActions(stationId, sim, topo) {
     return actions;
   }
 
-  // Switchboard bay actions
   const st = getStationById(stationId);
   if (!st || st.kind !== 'bay') return [];
   const cub = sim.cubicles[st.cubId];
@@ -644,7 +637,6 @@ export function getStationActions(stationId, sim, topo) {
 
   const actions = [];
 
-  // 1. Breaker Trip / Close
   if (cub.vcbClosed) {
     actions.push({
       id: 'trip_vcb',
@@ -668,7 +660,6 @@ export function getStationActions(stationId, sim, topo) {
     });
   }
 
-  // 2. Racking (HV bays)
   if (cub.isHV) {
     if (cub.rackingTurns > 0) {
       actions.push({
@@ -695,7 +686,6 @@ export function getStationActions(stationId, sim, topo) {
     }
   }
 
-  // 3. Padlock port & Castell Key
   actions.push({
     id: 'padlock_port',
     label: cub.rackingPadlocked ? 'Remove Racking Port Padlock' : 'Apply LOTO Padlock to Racking Port',
@@ -720,7 +710,6 @@ export function getStationActions(stationId, sim, topo) {
     });
   }
 
-  // 4. Integral Earth Switch EK6 (HV bays with requiredEarthKeys)
   if (cub.isHV && cub.requiredEarthKeys) {
     for (const kId of cub.requiredEarthKeys) {
       const inserted = cub.earthKeysInserted.includes(kId);
@@ -754,7 +743,6 @@ export function getStationActions(stationId, sim, topo) {
     });
   }
 
-  // 5. Compartment Door, Shutter Padlock, Live-Line Proving & Portable Earth CME (HV bays)
   if (cub.isHV) {
     actions.push({
       id: 'toggle_door',
@@ -777,18 +765,23 @@ export function getStationActions(stationId, sim, topo) {
         arg: cub.id,
       });
 
-      const testedAll = sim.ptp.phasesTested.L1 && sim.ptp.phasesTested.L2 && sim.ptp.phasesTested.L3;
-      if (!sim.ptp.completedCubicles[cub.id] && !testedAll) {
-        actions.push({
-          id: 'probe_all_phases',
-          label: 'Probe L1, L2 & L3 Cable Spouts with HV Wand',
-          anim: 'probe_wand',
-          tool: 'proving_wand',
-          duration: 1.45,
-          primary: sim.ptp.state === 1,
-          exec: 'probePhases',
-          arg: cub.id,
-        });
+      if (!sim.ptp.completedCubicles[cub.id]) {
+        const phases = ['L1', 'L2', 'L3'];
+        const firstUntested = phases.find((p) => !sim.ptp.phasesTested[p]);
+        for (const phase of phases) {
+          const tested = Boolean(sim.ptp.phasesTested[phase]);
+          actions.push({
+            id: `probe_${phase}`,
+            label: tested ? `Phase ${phase} Probed 0.0 V (Done)` : `Probe ${phase} Terminal with HV Wand`,
+            anim: 'probe_wand',
+            tool: 'proving_wand',
+            duration: 0.85,
+            done: tested,
+            primary: sim.ptp.state === 1 && firstUntested === phase,
+            exec: 'probePhase',
+            arg: { cubId: cub.id, phase },
+          });
+        }
       }
 
       const cmeApplied = cub.cme.pe && cub.cme.L1 && cub.cme.L2 && cub.cme.L3;

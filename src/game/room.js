@@ -91,9 +91,6 @@ function makeFloorDecal(label, accent = '#1f6f78') {
   return mesh;
 }
 
-/**
- * Builds the entire walkable shipboard 6.6 kV HV Switchroom around the existing 5-bay switchboard.
- */
 export function createSwitchroom(renderer) {
   const maxAniso = renderer?.capabilities?.getMaxAnisotropy?.() || 4;
   const root = new THREE.Group();
@@ -101,7 +98,6 @@ export function createSwitchroom(renderer) {
 
   const clickProxies = [];
 
-  // Procedural anti-slip marine steel checkerplate deck texture
   const deckTex = makeCanvasTexture(
     256,
     256,
@@ -127,7 +123,6 @@ export function createSwitchroom(renderer) {
     maxAniso
   );
 
-  // Hazard yellow-black safety striping texture
   const hazardTex = makeCanvasTexture(
     128,
     128,
@@ -150,19 +145,16 @@ export function createSwitchroom(renderer) {
     maxAniso
   );
 
-  // Marine bulkhead wall panel texture
   const wallTex = makeCanvasTexture(
     256,
     256,
     (ctx, w, h) => {
       ctx.fillStyle = '#dde3ea';
       ctx.fillRect(0, 0, w, h);
-      // Lower dado steel kickplate
       ctx.fillStyle = '#8b97a4';
       ctx.fillRect(0, h * 0.78, w, h * 0.22);
       ctx.fillStyle = '#1f6f78';
       ctx.fillRect(0, h * 0.76, w, h * 0.025);
-      // Panel seam
       ctx.strokeStyle = '#c4cdd6';
       ctx.lineWidth = 2;
       ctx.strokeRect(2, 2, w - 4, h - 4);
@@ -181,7 +173,6 @@ export function createSwitchroom(renderer) {
   const safetyYellowMat = new THREE.MeshStandardMaterial({ color: 0xd9a426, roughness: 0.42, metalness: 0.14 });
   const redBoxMat = new THREE.MeshStandardMaterial({ color: 0xb9372c, roughness: 0.42, metalness: 0.28 });
 
-  // 1. Walkable Deck Plate (y = -0.008 so plinth & dielectric mat never Z-fight)
   const deckMesh = new THREE.Mesh(new THREE.PlaneGeometry(8.8, 7.2), deckMat);
   deckMesh.rotation.x = -Math.PI / 2;
   deckMesh.position.set(0, -0.006, 2.25);
@@ -190,7 +181,6 @@ export function createSwitchroom(renderer) {
   root.add(deckMesh);
   clickProxies.push(deckMesh);
 
-  // Hazard safety line in front of the 6.6 kV switchboard operating zone
   const hazardStrip = new THREE.Mesh(
     new THREE.PlaneGeometry(4.9, 0.14),
     new THREE.MeshStandardMaterial({
@@ -206,36 +196,30 @@ export function createSwitchroom(renderer) {
   hazardStrip.position.set(0, 0.002, 1.32);
   root.add(hazardStrip);
 
-  // 2. Marine Bulkhead Walls (3.3 m height) & Overhead Ceiling Beams
   const H = 3.30;
   const wallGeoSide = new THREE.BoxGeometry(0.14, H, 7.2);
   const portWall = new THREE.Mesh(wallGeoSide, wallMat);
   portWall.position.set(-4.30, H / 2, 2.25);
   portWall.receiveShadow = true;
-  root.add(portWall);
 
   const stbdWall = new THREE.Mesh(wallGeoSide, wallMat);
   stbdWall.position.set(4.30, H / 2, 2.25);
   stbdWall.receiveShadow = true;
-  root.add(stbdWall);
 
   const wallGeoFrontBack = new THREE.BoxGeometry(8.75, H, 0.14);
   const backWall = new THREE.Mesh(wallGeoFrontBack, wallMat);
   backWall.position.set(0, H / 2, -1.28);
   backWall.receiveShadow = true;
-  root.add(backWall);
 
   const aftWall = new THREE.Mesh(wallGeoFrontBack, wallMat);
   aftWall.position.set(0, H / 2, 5.75);
   aftWall.receiveShadow = true;
-  root.add(aftWall);
+  root.add(portWall, stbdWall, backWall, aftWall);
 
-  // Bulkhead header sign above the 5-bay 6.6 kV switchboard
   const mainSign = makeSignMesh(3.4, 0.42, '6.6 kV HIGH-VOLTAGE SWITCHBOARD ROOM', 'DANGER · AUTHORIZED ETO PERSONNEL ONLY · 40 CAL/CM² PPE', '#b9372c');
   mainSign.position.set(0, 2.78, -1.19);
   root.add(mainSign);
 
-  // Overhead marine bulkhead girders & LED strip luminaires
   const ceilingGroup = new THREE.Group();
   const beamGeo = new THREE.BoxGeometry(8.5, 0.12, 0.14);
   const lampHousingGeo = new THREE.BoxGeometry(1.5, 0.06, 0.18);
@@ -258,7 +242,7 @@ export function createSwitchroom(renderer) {
   }
   root.add(ceilingGroup);
 
-  // 3. STATION A: HV PPE LOCKER (Port Bulkhead, x = -3.82, z = 2.50)
+  // PPE Locker
   const ppeGroup = new THREE.Group();
   ppeGroup.position.set(-3.82, 0, 2.50);
   ppeGroup.rotation.y = Math.PI / 2;
@@ -267,19 +251,12 @@ export function createSwitchroom(renderer) {
   lockerBody.position.set(0, 1.03, 0);
   lockerBody.castShadow = true;
   lockerBody.receiveShadow = true;
-  ppeGroup.add(lockerBody);
-
-  // Recessed interior display bay for visible PPE gear
   const lockerRecess = new THREE.Mesh(new THREE.BoxGeometry(1.18, 1.72, 0.10), steelDarkMat);
   lockerRecess.position.set(0, 1.04, 0.28);
-  ppeGroup.add(lockerRecess);
-
-  // Shelf divider
   const lockerShelf = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.04, 0.42), steelFrameMat);
   lockerShelf.position.set(0, 0.62, 0.16);
-  ppeGroup.add(lockerShelf);
+  ppeGroup.add(lockerBody, lockerRecess, lockerShelf);
 
-  // Visible 3D PPE Props inside locker (hidden individually when donned!)
   const lockerSuit = new THREE.Group();
   const coatHang = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.72, 0.16), new THREE.MeshStandardMaterial({ color: 0x3b4d47, roughness: 0.82 }));
   coatHang.position.set(-0.28, 1.24, 0.30);
@@ -316,7 +293,7 @@ export function createSwitchroom(renderer) {
   ppeGroup.add(ppeSign);
   root.add(ppeGroup);
 
-  // 4. STATION B: KEY BOX & TOOL BOARD (Port-Aft, x = -2.22, z = 5.18)
+  // Key Box & Tool Board
   const keysGroup = new THREE.Group();
   keysGroup.position.set(-2.22, 0, 5.18);
   keysGroup.rotation.y = Math.PI;
@@ -332,36 +309,25 @@ export function createSwitchroom(renderer) {
       keysGroup.add(leg);
     }
   }
-  // Shadowboard backdrop
   const pegboard = new THREE.Mesh(new THREE.BoxGeometry(1.54, 1.05, 0.06), steelDarkMat);
   pegboard.position.set(0, 1.48, -0.28);
-  keysGroup.add(pegboard);
-
-  // Red LOTO Safety Key Box
   const keyBox = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.26, 0.24), redBoxMat);
   keyBox.position.set(-0.38, 1.07, 0.06);
   keyBox.castShadow = true;
-  keysGroup.add(keyBox);
-
   const keyBoxStatusLedMat = new THREE.MeshBasicMaterial({ color: 0xe69f00 });
   const keyBoxLed = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), keyBoxStatusLedMat);
   keyBoxLed.position.set(-0.38, 1.22, 0.14);
-  keysGroup.add(keyBoxLed);
-
-  // Mounted Racking Crank & CME Hot-Stick props on pegboard
   const wallCrank = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.52, 8), steelFrameMat);
   wallCrank.position.set(0.12, 1.44, -0.22);
   const wallStick = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.95, 8), safetyYellowMat);
   wallStick.rotation.z = Math.PI / 2;
   wallStick.position.set(0.18, 1.76, -0.22);
-  keysGroup.add(wallCrank, wallStick);
-
   const keysSign = makeSignMesh(1.52, 0.30, 'LOTO KEY BOX & TOOLS', 'CASTELL KEYS · PADLOCKS · RACKING CRANK', '#1f6f78');
   keysSign.position.set(0, 2.22, -0.24);
-  keysGroup.add(keysSign);
+  keysGroup.add(pegboard, keyBox, keyBoxLed, wallCrank, wallStick, keysSign);
   root.add(keysGroup);
 
-  // 5. STATION C: PROVING UNIT & 5 kV MEGGER BENCH (Starboard-Aft, x = +2.22, z = 5.18)
+  // Proving Unit & 5 kV Megger Bench
   const testGroup = new THREE.Group();
   testGroup.position.set(2.22, 0, 5.18);
   testGroup.rotation.y = Math.PI;
@@ -377,36 +343,24 @@ export function createSwitchroom(renderer) {
       testGroup.add(leg);
     }
   }
-
-  // 6.6 kV Proving Unit box
   const provingUnit = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.22, 0.22), new THREE.MeshStandardMaterial({ color: 0x2a3440, roughness: 0.48 }));
   provingUnit.position.set(-0.42, 1.05, 0.04);
-  testGroup.add(provingUnit);
-
   const provingLedMat = new THREE.MeshBasicMaterial({ color: 0x22c55e });
   const provingLed = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 10), provingLedMat);
   provingLed.position.set(-0.42, 1.17, 0.11);
-  testGroup.add(provingLed);
-
-  // HV Proving Wand resting on bench
   const benchWand = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.92, 10), safetyYellowMat);
   benchWand.rotation.z = Math.PI / 2;
   benchWand.position.set(0.02, 0.98, 0.16);
-  testGroup.add(benchWand);
-
-  // 5 kV Insulation Resistance Megger Case
   const meggerCase = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.24, 0.30), safetyYellowMat);
   meggerCase.position.set(0.44, 1.06, -0.02);
   const meggerScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.12), new THREE.MeshBasicMaterial({ color: 0x132c22 }));
   meggerScreen.position.set(0.44, 1.09, 0.135);
-  testGroup.add(meggerCase, meggerScreen);
-
   const testSign = makeSignMesh(1.52, 0.30, 'PROVING & MEGGER BENCH', '6.6 kV PROVING UNIT · 5 kV PI INSULATION TESTER', '#d4a024');
   testSign.position.set(0, 2.22, -0.24);
-  testGroup.add(testSign);
+  testGroup.add(provingUnit, provingLed, benchWand, meggerCase, meggerScreen, testSign);
   root.add(testGroup);
 
-  // 6. STATION D: PERMIT-TO-WORK DESK (Starboard Bulkhead, x = +3.82, z = 2.50)
+  // Permit Desk
   const permitGroup = new THREE.Group();
   permitGroup.position.set(3.82, 0, 2.50);
   permitGroup.rotation.y = -Math.PI / 2;
@@ -414,34 +368,24 @@ export function createSwitchroom(renderer) {
   const deskTop = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.07, 0.68), deskWoodMat);
   deskTop.position.set(0, 0.94, 0);
   deskTop.castShadow = true;
-  permitGroup.add(deskTop);
   const deskBase = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.90, 0.56), steelDarkMat);
   deskBase.position.set(0, 0.45, -0.03);
-  permitGroup.add(deskBase);
-
-  // Red PTW Binder & Amber SFT Folder
   const ptwBinder = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.04, 0.38), redBoxMat);
   ptwBinder.position.set(-0.24, 0.99, 0.04);
   ptwBinder.rotation.y = 0.08;
   const sftFolder = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.36), safetyYellowMat);
   sftFolder.position.set(0.24, 0.99, 0.04);
   sftFolder.rotation.y = -0.10;
-  permitGroup.add(ptwBinder, sftFolder);
-
-  // Desk Permit Status Beacon
   const permitLampStem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.24, 10), steelFrameMat);
   permitLampStem.position.set(0, 1.09, -0.18);
   const permitBeaconMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
   const permitBeacon = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 12), permitBeaconMat);
   permitBeacon.position.set(0, 1.24, -0.18);
-  permitGroup.add(permitLampStem, permitBeacon);
-
   const permitSign = makeSignMesh(1.38, 0.30, 'PERMIT-TO-WORK DESK', 'PTW & SANCTION-FOR-TEST AUTHORIZATION', '#1f6f78');
   permitSign.position.set(0, 2.26, 0.04);
-  permitGroup.add(permitSign);
+  permitGroup.add(deskTop, deskBase, ptwBinder, sftFolder, permitLampStem, permitBeacon, permitSign);
   root.add(permitGroup);
 
-  // 7. Floor Decals + Invisible Click-Proxy Hitboxes for all 4 room stations & 5 bays
   const proxyMat = new THREE.MeshBasicMaterial({ visible: false });
   const stationProxySpecs = [
     { id: 'station:ppe', pos: [-3.80, 1.15, 2.50], size: [0.85, 2.3, 1.55], decal: 'PPE', accent: '#d4a024' },
@@ -466,7 +410,6 @@ export function createSwitchroom(renderer) {
     }
   }
 
-  // Bay front click proxies so clicking any switchboard bay in Game Mode walks directly to it
   for (const st of STATIONS.filter((s) => s.kind === 'bay')) {
     const bayProxy = new THREE.Mesh(new THREE.BoxGeometry(0.80, 2.20, 0.90), proxyMat);
     bayProxy.position.set(st.anchor.x, 1.10, 0.15);
@@ -475,7 +418,6 @@ export function createSwitchroom(renderer) {
     clickProxies.push(bayProxy);
   }
 
-  // 8. 3D Floor Guidance Waypoint Ring (shows next recommended station in Training Mode)
   const waypointGroup = new THREE.Group();
   const wpOuter = new THREE.Mesh(
     new THREE.RingGeometry(0.36, 0.44, 32),
@@ -492,7 +434,6 @@ export function createSwitchroom(renderer) {
   waypointGroup.add(wpOuter, wpInner);
   root.add(waypointGroup);
 
-  // 9. Click-to-Walk Target Deck Marker
   const walkMarkerMat = new THREE.MeshBasicMaterial({
     color: 0x22d3ee,
     side: THREE.DoubleSide,
@@ -518,23 +459,17 @@ export function createSwitchroom(renderer) {
   function syncRoomState(sim, recommendedStationId, dt, elapsed) {
     if (!sim) return;
 
-    // Update PPE locker items visibility
     lockerSuit.visible = !sim.ppe.suit;
     lockerGloves.visible = !sim.ppe.gloves;
     lockerBoots.visible = !sim.ppe.bootsMat;
 
-    // Update Key Box LED
     keyBoxStatusLedMat.color.setHex(sim.keyBoxLocked ? 0x22c55e : 0xe69f00);
-
-    // Update Proving Unit LED
     provingLedMat.color.setHex(sim.ptp.state === 1 ? 0x38bdf8 : sim.ptp.state === 2 ? 0xfacc15 : 0x22c55e);
 
-    // Update Permit Desk Beacon
     if (sim.ptw.active) permitBeaconMat.color.setHex(0x22c55e);
     else if (sim.sft.active) permitBeaconMat.color.setHex(0xf59e0b);
     else permitBeaconMat.color.setHex(0x94a3b8);
 
-    // Position floor guidance beacon in Training Mode
     const showGuide = sim.mode !== 'EXAM' && Boolean(recommendedStationId);
     waypointGroup.visible = showGuide;
     if (showGuide) {
@@ -547,7 +482,6 @@ export function createSwitchroom(renderer) {
       }
     }
 
-    // Animate click-to-walk deck marker
     if (walkMarkerTimer > 0) {
       walkMarkerTimer = Math.max(0, walkMarkerTimer - dt);
       const frac = 1 - walkMarkerTimer / 0.85;

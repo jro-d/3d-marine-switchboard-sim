@@ -36,23 +36,19 @@ test('resolveCollision clamps player within room bounds and outside switchboard 
   assert.ok(farOut.x >= ROOM_BOUNDS.minX + PLAYER_RADIUS - 1e-6);
   assert.ok(farOut.z <= ROOM_BOUNDS.maxZ - PLAYER_RADIUS + 1e-6);
 
-  // Attempting to walk inside switchboard bays should be pushed out to z >= 0.78 + radius
   const intoBoard = resolveCollision(0, 0.2, PLAYER_RADIUS);
   assert.ok(intoBoard.z >= 0.78 + PLAYER_RADIUS - 1e-6, `Expected z >= ${0.78 + PLAYER_RADIUS}, got ${intoBoard.z}`);
 
-  // Attempting to walk inside PPE locker should be pushed clear of x = -3.40 + radius
   const intoLocker = resolveCollision(-3.7, 2.5, PLAYER_RADIUS);
   assert.ok(intoLocker.x >= -3.40 + PLAYER_RADIUS - 1e-6, `Expected x >= ${-3.40 + PLAYER_RADIUS}, got ${intoLocker.x}`);
 });
 
 test('stepPlayerMovement handles camera-relative WASD and click-to-walk arrival', () => {
   const start = { x: 0, z: 2.8, yaw: Math.PI, speed: 0, walkCycle: 0, targetPoint: null, isBusy: false };
-  // Camera facing -Z (yaw = Math.PI): pressing forward decreases Z
   const moved = stepPlayerMovement(start, { forward: true, backward: false, left: false, right: false, cameraYaw: Math.PI }, 0.05);
   assert.ok(moved.z < start.z, 'Forward when facing -Z should reduce z');
   assert.ok(moved.speed > 1.0);
 
-  // Click-to-walk arrives cleanly at destination
   let p = { ...start, targetPoint: { x: 0.4, z: 2.8, faceYaw: 0 } };
   let arrived = false;
   for (let i = 0; i < 30; i++) {
@@ -103,13 +99,27 @@ test('getRecommendedTarget tracks full Mission 01 sequence across physical stati
   assert.equal(getRecommendedTarget(sim).stationId, 'station:permit');
 });
 
-test('getStationActions provides animated actions with tools for stations and bays', () => {
+test('getStationActions provides individual L1, L2, L3 probe actions when door is open', () => {
   const sim = makeBaseSim(1);
-  const ppeActions = getStationActions('station:ppe', sim, {});
-  assert.ok(ppeActions.some((a) => a.exec === 'donAllPpe' && a.anim === 'don_ppe'));
+  const bt = sim.cubicles['BT-M1'];
+  bt.vcbClosed = false;
+  bt.rackingTurns = 0;
+  bt.earthSwitchClosed = true;
+  bt.doorOpen = true;
+  sim.ptp.state = 1;
 
-  const bayActions = getStationActions('bay:BT-M1', sim, {});
-  assert.ok(bayActions.some((a) => a.exec === 'tripVcb' && a.anim === 'push_button'));
-  assert.ok(bayActions.some((a) => a.exec === 'rackOut' && a.tool === 'racking_handle'));
-  assert.ok(bayActions.some((a) => a.exec === 'toggleEarthSwitch' && a.anim === 'pull_lever'));
+  const actions = getStationActions('bay:BT-M1', sim);
+  assert.equal(actions.some((a) => a.id === 'probe_all_phases'), false);
+  const p1 = actions.find((a) => a.id === 'probe_L1');
+  const p2 = actions.find((a) => a.id === 'probe_L2');
+  const p3 = actions.find((a) => a.id === 'probe_L3');
+  assert.ok(p1 && p2 && p3);
+  assert.equal(p1.exec, 'probePhase');
+  assert.equal(p1.primary, true);
+  assert.equal(p2.primary, false);
+
+  sim.ptp.phasesTested.L1 = true;
+  const actionsAfterL1 = getStationActions('bay:BT-M1', sim);
+  assert.equal(actionsAfterL1.find((a) => a.id === 'probe_L1').done, true);
+  assert.equal(actionsAfterL1.find((a) => a.id === 'probe_L2').primary, true);
 });
