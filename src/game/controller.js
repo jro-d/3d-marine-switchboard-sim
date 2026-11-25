@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 import {
-  STATIONS,
   getStationById,
-  dampAngle,
   normalizeAngle,
   stepPlayerMovement,
   findNearestInteractable,
@@ -24,6 +22,33 @@ const TOOL_LABELS = {
   ptw_clipboard: 'PTW Clipboard',
 };
 
+const HOTKEY_TOOLS = {
+  1: 'HAND',
+  2: 'CRANK',
+  3: 'EARTH_LEVER',
+  4: 'PADLOCK',
+  5: 'TAG_DANGER',
+  6: 'TAG_EARTH',
+  7: 'HV_TESTER',
+  8: 'PORTABLE_EARTH',
+  9: 'MEGGER',
+  0: 'TAG_SFT',
+};
+
+const SIM_TO_GAME_TOOL = {
+  HAND: 'none',
+  CRANK: 'racking_handle',
+  EARTH_LEVER: 'castell_key',
+  PADLOCK: 'padlock',
+  TAG_DANGER: 'ptw_clipboard',
+  TAG_EARTH: 'ptw_clipboard',
+  HV_TESTER: 'proving_wand',
+  VOLTAGE_TESTER: 'proving_wand',
+  PORTABLE_EARTH: 'cme_stick',
+  MEGGER: 'megger_leads',
+  TAG_SFT: 'ptw_clipboard',
+};
+
 const _camGoalPos = new THREE.Vector3();
 const _camGoalLook = new THREE.Vector3();
 const _camCurLook = new THREE.Vector3(0, 1.25, 0);
@@ -31,10 +56,24 @@ const _raycaster = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
 
 /**
- * Initializes the Playable 3D Engineer Game Mode on top of the existing Three.js simulator.
+ * Initializes the Playable 3D Engineer Switchroom Game.
  */
 export function initSwitchroomGame(bridge) {
-  const { scene, camera, renderer, controls, plinthGroup, stageWrap } = bridge;
+  const {
+    scene,
+    camera,
+    renderer,
+    stageWrap,
+    switchboardMeshes = [],
+    getSim,
+    getTopology,
+    getLotoSteps,
+    actions: simActions,
+    audio,
+    logEvent,
+    renderAll,
+    openPtwModal,
+  } = bridge;
 
   const room = createSwitchroom(renderer);
   const character = createEngineerCharacter();
@@ -44,11 +83,9 @@ export function initSwitchroomGame(bridge) {
   camera.add(character.fpGroup);
   if (!camera.parent) scene.add(camera);
 
-  // Core game state
   const game = {
-    appMode: 'game', // 'game' | 'classic'
-    cameraMode: 'third', // 'third' | 'first'
-    camYaw: Math.PI, // Math.PI faces -Z (toward the 5-bay switchboard)
+    cameraMode: 'third',
+    camYaw: Math.PI,
     camPitch: 0.24,
     camDist: 2.85,
     heldTool: 'none',
@@ -64,7 +101,7 @@ export function initSwitchroomGame(bridge) {
       pendingStationId: null,
       isBusy: false,
     },
-    activeAnim: null, // { type, label, tool, elapsed, duration, commitAt, committed, onCommit }
+    activeAnim: null,
     input: {
       forward: false,
       backward: false,
@@ -87,7 +124,6 @@ export function initSwitchroomGame(bridge) {
   character.root.position.set(game.player.x, 0, game.player.z);
   character.root.rotation.y = game.player.yaw;
 
-  // Build Game Mode HUD inside stageWrap
   const hud = document.createElement('div');
   hud.id = 'hvGameHud';
   hud.setAttribute('data-testid', 'game-hud');
@@ -95,7 +131,7 @@ export function initSwitchroomGame(bridge) {
     <div class="game-objective-card" role="region" aria-label="Mission objective">
       <div class="game-obj-head">
         <span class="game-obj-kicker" id="gameObjStep">Mission 01 · Step 0 / 6</span>
-        <span class="game-obj-meta" id="gameObjMode">Training</span>
+        <span class="game-obj-meta" id="gameObjMode">Training Mode</span>
       </div>
       <p class="game-obj-text" id="gameObjHint">Walk to the Port PPE Locker to don 40 cal/cm² PPE.</p>
       <div class="game-obj-row">
@@ -170,10 +206,6 @@ export function initSwitchroomGame(bridge) {
   const btnCamThird = hud.querySelector('#btnCamThird');
   const btnCamFirst = hud.querySelector('#btnCamFirst');
 
-  // Top bar mode switch buttons (added in index.html)
-  const btnModeGame = document.getElementById('btnAppModeGame');
-  const btnModeClassic = document.getElementById('btnAppModeClassic');
-
   function setCameraMode(mode) {
     game.cameraMode = mode === 'first' ? 'first' : 'third';
     const isFirst = game.cameraMode === 'first';
@@ -190,55 +222,6 @@ export function initSwitchroomGame(bridge) {
     } else {
       game.camPitch = 0.24;
     }
-  }
-
-  function setAppMode(mode) {
-    game.appMode = mode === 'classic' ? 'classic' : 'game';
-    const isGame = game.appMode === 'game';
-    window.__HV_GAME_MODE__ = isGame;
-    document.body.dataset.appMode = game.appMode;
-
-    if (btnModeGame) {
-      btnModeGame.classList.toggle('active', isGame);
-      btnModeGame.setAttribute('aria-pressed', String(isGame));
-    }
-    if (btnModeClassic) {
-      btnModeClassic.classList.toggle('active', !isGame);
-      btnModeClassic.setAttribute('aria-pressed', String(!isGame));
-    }
-
-    room.root.visible = isGame;
-    character.root.visible = isGame;
-    character.fpGroup.visible = isGame && game.cameraMode === 'first';
-    plinthGroup.visible = !isGame;
-    controls.enabled = !isGame;
-
-    if (isGame) {
-      // Ensure 3D Twin view is visible & explode is assembled
-      if (bridge.getSim().viewMode !== '3D') {
-        bridge.getSim().viewMode = '3D';
-        bridge.render();
-      }
-      bridge.setExplodePct(0, false);
-      bridge.setIsolatedPart('all');
-      scene.background.setHex(0xd4dce4);
-      scene.fog = new THREE.Fog(0xd4dce4, 7.5, 19.5);
-      camera.fov = 52;
-      camera.updateProjectionMatrix();
-      snapCameraImmediate();
-      game.lastHudKey = '';
-      refreshHud(true);
-    } else {
-      scene.background.setHex(0xf1f3f6);
-      scene.fog = null;
-      camera.fov = 38;
-      camera.updateProjectionMatrix();
-      camera.position.set(0.0, 1.85, 5.30);
-      controls.target.set(0.0, 1.08, 0.0);
-      controls.update();
-      bridge.applyCameraPreset('lineup');
-    }
-    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
 
   function snapCameraImmediate() {
@@ -264,151 +247,147 @@ export function initSwitchroomGame(bridge) {
 
   function walkToStation(stationId) {
     const st = getStationById(stationId);
-    if (!st) return;
-    if (game.activeAnim) return;
+    if (!st || game.activeAnim) return;
     game.player.targetPoint = { x: st.anchor.x, z: st.anchor.z, faceYaw: st.faceYaw };
     game.player.pendingStationId = st.id;
     room.showWalkMarker(st.anchor.x, st.anchor.z);
     if (st.kind === 'bay' && st.cubId) {
-      bridge.selectCubicle(st.cubId);
+      simActions.selectCubicle(st.cubId);
     }
   }
 
   function executeBridgeAction(action) {
-    const sim = bridge.getSim();
+    const sim = getSim();
     const prevScore = sim.score;
 
     switch (action.exec) {
       case 'donAllPpe':
         sim.ppe = { suit: true, glovesAirTested: true, gloves: true, bootsMat: true };
-        bridge.AudioEngine.playPiezo(false);
-        bridge.logEvent('ETO donned full 40 cal/cm² PPE, air-tested Class 2 gloves & deployed 15 kV mat.', 'safe');
-        bridge.render();
+        audio.playPiezo(false);
+        logEvent('ETO donned full 40 cal/cm² PPE, air-tested Class 2 gloves & deployed 15 kV mat.', 'safe');
+        renderAll();
         break;
       case 'rollTestGloves':
         sim.ppe.glovesAirTested = true;
-        bridge.AudioEngine.playPiezo(false);
-        bridge.logEvent('Class 2 HV gloves pneumatic roll air-test passed at PPE Locker.', 'safe');
-        bridge.render();
+        audio.playPiezo(false);
+        logEvent('Class 2 HV gloves pneumatic roll air-test passed at PPE Locker.', 'safe');
+        renderAll();
         break;
       case 'toggleSuit':
         sim.ppe.suit = !sim.ppe.suit;
-        bridge.AudioEngine.playRatchet();
-        bridge.render();
+        audio.playRatchet();
+        renderAll();
         break;
       case 'toggleGloves':
         if (!sim.ppe.glovesAirTested && !sim.ppe.gloves) {
-          document.getElementById('btnDonGloves')?.click();
+          simActions.triggerViolation(5, 'Donned Gloves Without Air-Test', 'Perform pneumatic roll air-test first.');
         } else {
           sim.ppe.gloves = !sim.ppe.gloves;
-          bridge.AudioEngine.playRatchet();
-          bridge.render();
+          audio.playRatchet();
+          renderAll();
         }
         break;
       case 'toggleBootsMat':
         sim.ppe.bootsMat = !sim.ppe.bootsMat;
-        bridge.AudioEngine.playClunk(90);
-        bridge.render();
+        audio.playClunk(90);
+        renderAll();
         break;
       case 'toggleKeyBox':
-        bridge.toggleSafetyKeyBox();
+        simActions.toggleSafetyKeyBox();
         break;
       case 'equipTool':
         game.heldTool = action.arg || 'none';
         character.setHeldTool(game.heldTool);
-        bridge.AudioEngine.playRatchet();
+        audio.playRatchet();
         break;
       case 'equipSimTool':
         sim.activeTool = action.arg || 'HAND';
         game.heldTool = action.tool || 'cme_stick';
         character.setHeldTool(game.heldTool);
-        bridge.AudioEngine.playRatchet();
-        bridge.render();
+        audio.playRatchet();
+        renderAll();
         break;
       case 'proveUnit':
-        sim.activeTool = 'VOLTAGE_TESTER';
-        bridge.proveTesterOnUnit();
+        sim.activeTool = 'HV_TESTER';
+        simActions.proveTesterOnUnit();
         break;
       case 'connectMegger':
-        bridge.connectMegger();
+        simActions.connectMegger();
         break;
       case 'runMegger':
-        bridge.runMegger();
+        simActions.runMegger();
         break;
       case 'dischargeMegger':
-        bridge.dischargeMegger();
+        simActions.dischargeMegger();
         break;
       case 'issuePTW':
-        bridge.issuePTW();
+        simActions.issuePTW();
         break;
       case 'cancelPTW':
-        bridge.cancelPTW();
+        simActions.cancelPTW();
         break;
       case 'issueSFT':
-        bridge.issueSFT();
+        simActions.issueSFT();
         break;
       case 'cancelSFT':
-        bridge.cancelSFT();
+        simActions.cancelSFT();
         break;
       case 'openPtwModal':
-        document.getElementById('btnFullPtwView')?.click();
+        openPtwModal();
         break;
       case 'tripVcb':
-        bridge.pressTripVCB(action.arg);
+        simActions.pressTripVCB(action.arg);
         break;
       case 'closeVcb':
-        bridge.pressCloseVCB(action.arg);
+        simActions.pressCloseVCB(action.arg);
         break;
       case 'rackOut':
-        bridge.rackVCB(action.arg, -10);
+        simActions.rackVCB(action.arg, -10);
         break;
       case 'rackIn':
-        bridge.rackVCB(action.arg, 10);
+        simActions.rackVCB(action.arg, 10);
         break;
       case 'toggleRackingPadlock':
-        bridge.toggleRackingPadlock(action.arg);
+        simActions.toggleRackingPadlock(action.arg);
         break;
       case 'toggleCastellVcb':
-        bridge.toggleCastellVCBLock(action.arg);
+        simActions.toggleCastellVCBLock(action.arg);
         break;
       case 'toggleEarthKey':
-        bridge.toggleEarthSwitchKey(action.arg.cubId, action.arg.keyId);
+        simActions.toggleEarthSwitchKey(action.arg.cubId, action.arg.keyId);
         break;
       case 'toggleEarthSwitch':
-        bridge.toggleIntegralEarthSwitch(action.arg);
+        simActions.toggleIntegralEarthSwitch(action.arg);
         break;
       case 'toggleEarthPadlock':
-        bridge.toggleEarthPadlock(action.arg);
+        simActions.toggleEarthPadlock(action.arg);
         break;
       case 'toggleDoor':
-        bridge.toggleDoor3D(action.arg);
+        simActions.toggleDoor3D(action.arg);
         break;
       case 'toggleShutterPadlock':
-        bridge.toggleShutterPadlock(action.arg);
+        simActions.toggleShutterPadlock(action.arg);
         break;
-      case 'probePhases':
-        sim.activeTool = 'VOLTAGE_TESTER';
-        bridge.interactTerminal(action.arg, 'L1');
-        bridge.interactTerminal(action.arg, 'L2');
-        bridge.interactTerminal(action.arg, 'L3');
+      case 'probePhase':
+        sim.activeTool = 'HV_TESTER';
+        simActions.interactTerminal(action.arg.cubId, action.arg.phase);
         break;
       case 'applyCme':
         sim.activeTool = 'PORTABLE_EARTH';
-        bridge.interactTerminal(action.arg, 'PE');
-        bridge.interactTerminal(action.arg, 'L1');
-        bridge.interactTerminal(action.arg, 'L2');
-        bridge.interactTerminal(action.arg, 'L3');
+        simActions.interactTerminal(action.arg, 'PE');
+        simActions.interactTerminal(action.arg, 'L1');
+        simActions.interactTerminal(action.arg, 'L2');
+        simActions.interactTerminal(action.arg, 'L3');
         break;
       case 'removeCme':
         sim.activeTool = 'PORTABLE_EARTH';
-        bridge.interactTerminal(action.arg, 'L1');
-        bridge.interactTerminal(action.arg, 'L2');
-        bridge.interactTerminal(action.arg, 'L3');
-        bridge.interactTerminal(action.arg, 'PE');
+        simActions.interactTerminal(action.arg, 'L1');
+        simActions.interactTerminal(action.arg, 'L2');
+        simActions.interactTerminal(action.arg, 'L3');
+        simActions.interactTerminal(action.arg, 'PE');
         break;
     }
 
-    // If an interlock violation occurred (score dropped), trigger defensive recoil animation!
     if (sim.score < prevScore) {
       game.activeAnim = {
         type: 'recoil',
@@ -429,7 +408,7 @@ export function initSwitchroomGame(bridge) {
     if (station) {
       game.player.yaw = station.faceYaw;
       if (station.kind === 'bay' && station.cubId) {
-        bridge.selectCubicle(station.cubId);
+        simActions.selectCubicle(station.cubId);
       }
     }
 
@@ -455,7 +434,7 @@ export function initSwitchroomGame(bridge) {
     elBusyFill.style.width = '0%';
   }
 
-  function getStationStatusSummary(st, sim, topo) {
+  function getStationStatusSummary(st, sim) {
     if (!st) return '';
     if (st.id === 'station:ppe') {
       const n = (sim.ppe.suit ? 1 : 0) + (sim.ppe.gloves ? 1 : 0) + (sim.ppe.bootsMat ? 1 : 0);
@@ -482,10 +461,9 @@ export function initSwitchroomGame(bridge) {
   let currentStationActions = [];
 
   function refreshHud(force = false) {
-    if (game.appMode !== 'game') return;
-    const sim = bridge.getSim();
-    const topo = bridge.getTopology();
-    const steps = bridge.getLotoSteps();
+    const sim = getSim();
+    const topo = getTopology();
+    const steps = getLotoSteps();
     const doneCount = steps.filter((s) => s.done).length;
     const rec = getRecommendedTarget(sim);
     const st = game.nearbyStation;
@@ -501,6 +479,9 @@ export function initSwitchroomGame(bridge) {
       sim.ppe.glovesAirTested,
       sim.keyBoxLocked,
       sim.ptp.state,
+      sim.ptp.phasesTested.L1,
+      sim.ptp.phasesTested.L2,
+      sim.ptp.phasesTested.L3,
       sim.ptw.active,
       sim.ptw.cancelled,
       sim.sft.active,
@@ -508,6 +489,7 @@ export function initSwitchroomGame(bridge) {
       sim.megger.connectedCubicle,
       sim.megger.tested,
       sim.megger.windingChargeVolts,
+      sim.activeTool,
       game.heldTool,
       st?.id || null,
       rec.stationId,
@@ -525,10 +507,12 @@ export function initSwitchroomGame(bridge) {
     btnWalkToNext.hidden = sim.mode === 'EXAM';
     btnWalkToNext.dataset.targetStation = rec.stationId;
 
-    elPpeStatus.textContent = `PPE: ${ppeCount}/3 · Tool: ${TOOL_LABELS[game.heldTool] || 'Hands free'}`;
+    if (!game.activeAnim) {
+      game.heldTool = SIM_TO_GAME_TOOL[sim.activeTool] || 'none';
+    }
+    elPpeStatus.textContent = `PPE: ${ppeCount}/3 · Tool: ${TOOL_LABELS[game.heldTool] || sim.activeTool || 'Hands free'}`;
     elPpeStatus.classList.toggle('ok', isFullPpeState(sim.ppe));
 
-    // Sync active dock station highlight
     hud.querySelectorAll('[data-walk-station]').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.walkStation === st?.id);
     });
@@ -557,7 +541,6 @@ export function initSwitchroomGame(bridge) {
     });
   }
 
-  // Wire HUD buttons
   btnWalkToNext.addEventListener('click', () => {
     const targetId = btnWalkToNext.dataset.targetStation;
     if (targetId) walkToStation(targetId);
@@ -577,23 +560,11 @@ export function initSwitchroomGame(bridge) {
     btn.addEventListener('click', () => walkToStation(btn.dataset.walkStation));
   });
 
-  if (btnModeGame) btnModeGame.addEventListener('click', () => setAppMode('game'));
-  if (btnModeClassic) btnModeClassic.addEventListener('click', () => setAppMode('classic'));
-
-  // Keyboard controls (WASD / Arrows / Shift / E / 1-6 / V / G / H)
   window.addEventListener('keydown', (e) => {
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
     if (document.querySelector('dialog[open]')) return;
 
     const k = e.key.toLowerCase();
-    if (k === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault();
-      setAppMode(game.appMode === 'game' ? 'classic' : 'game');
-      return;
-    }
-
-    if (game.appMode !== 'game') return;
-
     if (k === 'w' || e.key === 'ArrowUp') { game.input.forward = true; e.preventDefault(); }
     else if (k === 's' || e.key === 'ArrowDown') { game.input.backward = true; e.preventDefault(); }
     else if (k === 'a' || e.key === 'ArrowLeft') { game.input.left = true; e.preventDefault(); }
@@ -611,11 +582,19 @@ export function initSwitchroomGame(bridge) {
         const primary = currentStationActions.find((a) => a.primary) || currentStationActions[0];
         startAnimatedAction(primary, game.nearbyStation);
       }
-    } else if (k >= '1' && k <= '6') {
-      const idx = Number(k) - 1;
-      if (game.nearbyStation && currentStationActions[idx]) {
+    } else if (k >= '0' && k <= '9') {
+      const n = Number(k);
+      const idx = n - 1;
+      if (!e.shiftKey && n >= 1 && game.nearbyStation && currentStationActions[idx]) {
         e.preventDefault();
         startAnimatedAction(currentStationActions[idx], game.nearbyStation);
+      } else if (HOTKEY_TOOLS[n]) {
+        e.preventDefault();
+        const sim = getSim();
+        sim.activeTool = HOTKEY_TOOLS[n];
+        game.heldTool = SIM_TO_GAME_TOOL[sim.activeTool] || 'none';
+        renderAll();
+        refreshHud(true);
       }
     }
   });
@@ -634,11 +613,9 @@ export function initSwitchroomGame(bridge) {
     game.drag.active = false;
   });
 
-  // Pointer drag look + click-to-walk / click-station interaction on WebGL canvas
   const domEl = renderer.domElement;
 
   domEl.addEventListener('pointerdown', (e) => {
-    if (game.appMode !== 'game') return;
     game.drag.active = true;
     game.drag.moved = false;
     game.drag.startX = e.clientX;
@@ -648,7 +625,7 @@ export function initSwitchroomGame(bridge) {
   });
 
   window.addEventListener('pointermove', (e) => {
-    if (game.appMode !== 'game' || !game.drag.active) return;
+    if (!game.drag.active) return;
     const dx = e.clientX - game.drag.lastX;
     const dy = e.clientY - game.drag.lastY;
     game.drag.lastX = e.clientX;
@@ -670,7 +647,6 @@ export function initSwitchroomGame(bridge) {
   });
 
   domEl.addEventListener('pointerup', (e) => {
-    if (game.appMode !== 'game') return;
     const wasMoved = game.drag.moved;
     game.drag.active = false;
     if (wasMoved) return;
@@ -680,10 +656,33 @@ export function initSwitchroomGame(bridge) {
     _ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     _raycaster.setFromCamera(_ndc, camera);
 
+    // If standing at an open HV bay, check direct clicks on L1/L2/L3/PE terminal meshes first
+    if (game.nearbyStation?.kind === 'bay' && switchboardMeshes.length > 0) {
+      const sim = getSim();
+      const nearCub = sim.cubicles[game.nearbyStation.cubId];
+      if (nearCub && nearCub.doorOpen) {
+        const meshHits = _raycaster.intersectObjects(switchboardMeshes, false);
+        const termHit = meshHits.find((h) => h.object.userData.terminalId && h.object.userData.cubId === nearCub.id);
+        if (termHit) {
+          const term = termHit.object.userData.terminalId;
+          const act = currentStationActions.find((a) => a.id === `probe_${term}`) || {
+            id: `probe_${term}`,
+            label: `Probe ${term} Terminal`,
+            anim: 'probe_wand',
+            tool: 'proving_wand',
+            duration: 0.85,
+            exec: 'probePhase',
+            arg: { cubId: nearCub.id, phase: term },
+          };
+          startAnimatedAction(act, game.nearbyStation);
+          return;
+        }
+      }
+    }
+
     const hits = _raycaster.intersectObjects(room.clickProxies, false);
     if (hits.length === 0) return;
 
-    // Prefer clicking a station/bay proxy over floor
     const stationHit = hits.find((h) => h.object.userData.stationId);
     if (stationHit) {
       walkToStation(stationHit.object.userData.stationId);
@@ -700,20 +699,17 @@ export function initSwitchroomGame(bridge) {
   });
 
   domEl.addEventListener('wheel', (e) => {
-    if (game.appMode !== 'game' || game.cameraMode !== 'third') return;
+    if (game.cameraMode !== 'third') return;
     e.preventDefault();
     game.camDist = THREE.MathUtils.clamp(game.camDist + Math.sign(e.deltaY) * 0.25, 1.75, 4.8);
   }, { passive: false });
 
-  // Main per-frame update hook invoked from index.html's render loop
   function tick(dt) {
-    if (game.appMode !== 'game') return;
     const clampedDt = Math.min(Math.max(dt, 0.001), 0.14);
     game.elapsed += clampedDt;
 
-    const sim = bridge.getSim();
+    const sim = getSim();
 
-    // 1. Update active procedural task animation
     if (game.activeAnim) {
       const anim = game.activeAnim;
       anim.elapsed += clampedDt;
@@ -734,25 +730,17 @@ export function initSwitchroomGame(bridge) {
       }
     }
 
-    // 2. Step hybrid WASD + click-to-walk locomotion
-    const nextPlayer = stepPlayerMovement(
-      game.player,
-      { ...game.input, cameraYaw: game.camYaw },
-      clampedDt
-    );
-    game.player = nextPlayer;
+    game.player = stepPlayerMovement(game.player, { ...game.input, cameraYaw: game.camYaw }, clampedDt);
 
-    // 3. Detect nearby station & update selected bay in simulator
     const near = findNearestInteractable(game.player.x, game.player.z);
     if (near?.id !== game.nearbyStation?.id) {
       game.nearbyStation = near;
       if (near?.kind === 'bay' && near.cubId && sim.selectedCubicle !== near.cubId) {
-        bridge.selectCubicle(near.cubId);
+        simActions.selectCubicle(near.cubId);
       }
       refreshHud(true);
     }
 
-    // If arrived at a clicked station, orient cleanly toward it
     if (game.player.arrived && game.player.pendingStationId) {
       const st = getStationById(game.player.pendingStationId);
       if (st) {
@@ -762,7 +750,6 @@ export function initSwitchroomGame(bridge) {
       game.player.pendingStationId = null;
     }
 
-    // 4. Sync character transform, PPE visuals & procedural skeletal pose
     character.root.position.set(game.player.x, 0, game.player.z);
     character.root.rotation.y = game.player.yaw;
     character.setPpeVisuals(sim.ppe);
@@ -773,11 +760,9 @@ export function initSwitchroomGame(bridge) {
       anim: game.activeAnim,
     });
 
-    // 5. Sync physical room props & guidance waypoint
     const rec = getRecommendedTarget(sim);
     room.syncRoomState(sim, rec.stationId, clampedDt, game.elapsed);
 
-    // 6. Smooth 3rd-person or 1st-person camera rig
     if (game.cameraMode === 'first') {
       _camGoalPos.set(game.player.x, 1.62, game.player.z);
       camera.position.lerp(_camGoalPos, 1 - Math.exp(-16 * clampedDt));
@@ -790,7 +775,6 @@ export function initSwitchroomGame(bridge) {
       camera.lookAt(_camCurLook);
     } else {
       const dist = game.camDist;
-      // Clamp camera inside room bulkheads so walls never clip the view
       const rawX = game.player.x - Math.sin(game.camYaw) * dist * Math.cos(game.camPitch);
       const rawZ = game.player.z - Math.cos(game.camYaw) * dist * Math.cos(game.camPitch);
       const rawY = 1.48 + Math.sin(game.camPitch) * dist;
@@ -814,25 +798,23 @@ export function initSwitchroomGame(bridge) {
     refreshHud(false);
   }
 
-  // Allow Mission resets to reposition HUD & keep player standing ready
-  const origInitMission = bridge.initMission;
-  if (typeof origInitMission === 'function') {
-    window.__HV_ON_MISSION_RESET__ = () => {
-      game.activeAnim = null;
-      game.player.isBusy = false;
-      elBusyBar.hidden = true;
-      game.lastHudKey = '';
-      refreshHud(true);
-    };
+  function onMissionReset() {
+    game.activeAnim = null;
+    game.player.isBusy = false;
+    elBusyBar.hidden = true;
+    game.lastHudKey = '';
+    refreshHud(true);
   }
 
-  // Expose lightweight runtime handle for verification & debugging
+  const params = new URLSearchParams(window.location.search);
+  setCameraMode(params.get('cam') === 'first' ? 'first' : 'third');
+  snapCameraImmediate();
+  refreshHud(true);
+
   window.__HV_GAME__ = {
-    setAppMode,
     setCameraMode,
     walkToStation,
     getState: () => ({
-      appMode: game.appMode,
       cameraMode: game.cameraMode,
       player: { x: Number(game.player.x.toFixed(2)), z: Number(game.player.z.toFixed(2)), yaw: Number(game.player.yaw.toFixed(2)) },
       nearbyStation: game.nearbyStation?.id || null,
@@ -841,10 +823,5 @@ export function initSwitchroomGame(bridge) {
     }),
   };
 
-  // Start in Game Mode (or Classic if ?mode=classic)
-  const params = new URLSearchParams(window.location.search);
-  setCameraMode(params.get('cam') === 'first' ? 'first' : 'third');
-  setAppMode(params.get('mode') === 'classic' ? 'classic' : 'game');
-
-  return { tick, setAppMode, setCameraMode };
+  return { tick, setCameraMode, onMissionReset, refreshHud };
 }

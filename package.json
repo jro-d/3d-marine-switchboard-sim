@@ -5,13 +5,18 @@
   "type": "module",
   "description": "Marine HV 6.6 kV Switchboard — 3D Digital Twin, Switching & Permit-to-Work Simulator",
   "scripts": {
-    "dev": "node server.js",
+    "dev": "vite",
     "start": "node server.js",
-    "build": "node -e \"import('node:fs').then(fs => { for (const f of ['index.html', 'server.js', 'game/navigation.js', 'game/room.js', 'game/character.js', 'game/controller.js', 'game/game.css', 'design-system/fonts.css', 'design-system/tokens.css', 'design-system/components.css']) { if (!fs.existsSync(f)) throw new Error('Missing required file: ' + f); } console.log('All static & game modules verified.'); })\"",
-    "lint": "node --check server.js && node --check game/navigation.js && node --check game/room.js && node --check game/character.js && node --check game/controller.js",
-    "test": "node --test server.test.mjs game/navigation.test.mjs"
+    "preview": "node server.js",
+    "build": "vite build",
+    "lint": "node --check server.js && node --check src/main.js && node --check src/sim/audio.js && node --check src/sim/state.js && node --check src/sim/interlocks.js && node --check src/sim/missions.js && node --check src/switchboard/materials.js && node --check src/switchboard/textures.js && node --check src/switchboard/hv-bay.js && node --check src/switchboard/lv-bay.js && node --check src/switchboard/switchboard.js && node --check src/game/navigation.js && node --check src/game/room.js && node --check src/game/character.js && node --check src/game/controller.js && node --check src/ui/hud.js",
+    "test": "node --test server.test.mjs src/sim/sim.test.mjs src/game/navigation.test.mjs"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.22.3",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.8"
   }
 }

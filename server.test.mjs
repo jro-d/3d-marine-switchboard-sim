@@ -1,20 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
 import { createApp } from './server.js';
 
-function startTestServer() {
+function startTestServer(rootDir) {
+  const app = createApp(rootDir);
+  const server = http.createServer(app);
   return new Promise((resolve) => {
-    const server = http.createServer(createApp());
     server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      resolve({ server, port: address.port });
+      const addr = server.address();
+      resolve({ server, port: addr.port });
     });
   });
 }
 
-test('serves index.html and design-system stylesheets with 200 OK', async () => {
-  const { server, port } = await startTestServer();
+test('serves built index.html and bundled Vite assets with 200 OK', async () => {
+  const distDir = path.resolve('dist');
+  assert.ok(fs.existsSync(path.join(distDir, 'index.html')), 'Run npm run build before running server tests');
+
+  const { server, port } = await startTestServer(distDir);
   try {
     const base = `http://127.0.0.1:${port}`;
 
@@ -22,16 +28,18 @@ test('serves index.html and design-system stylesheets with 200 OK', async () => 
     assert.equal(indexRes.status, 200);
     assert.match(indexRes.headers.get('content-type') || '', /text\/html/);
     const html = await indexRes.text();
-    assert.match(html, /Marine HV 6\.6 kV Switchboard/);
+    assert.match(html, /Marine HV 6\.6 kV Switchroom/);
 
-    for (const cssPath of [
-      '/design-system/fonts.css',
-      '/design-system/tokens.css',
-      '/design-system/components.css',
-    ]) {
-      const res = await fetch(`${base}${cssPath}`);
-      assert.equal(res.status, 200, `Expected 200 for ${cssPath}`);
-      assert.match(res.headers.get('content-type') || '', /text\/css/);
+    const assetRefs = [
+      ...html.matchAll(/(?:href|src)="(\.\/assets\/[^"]+|\/assets\/[^"]+)"/g),
+    ].map((m) => m[1].replace(/^\./, ''));
+
+    assert.ok(assetRefs.length >= 2, `Expected built CSS and JS assets in index.html, got: ${assetRefs.join(', ')}`);
+
+    for (const assetPath of assetRefs) {
+      const urlPath = assetPath.startsWith('/') ? assetPath : `/${assetPath}`;
+      const res = await fetch(`${base}${urlPath}`);
+      assert.equal(res.status, 200, `Expected 200 for ${urlPath}`);
     }
 
     const missingRes = await fetch(`${base}/does-not-exist-check.txt`);

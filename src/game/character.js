@@ -3,7 +3,6 @@ import * as THREE from 'three';
 function createToolProps() {
   const props = {};
 
-  // 1. L-shaped zinc-plated VCB Racking Crank Handle
   const crank = new THREE.Group();
   const metalMat = new THREE.MeshStandardMaterial({ color: 0xb8c2cc, metalness: 0.82, roughness: 0.28 });
   const gripMat = new THREE.MeshStandardMaterial({ color: 0x1e252c, roughness: 0.85 });
@@ -18,7 +17,6 @@ function createToolProps() {
   crank.add(shaft, arm, handle);
   props.racking_handle = crank;
 
-  // 2. Brass Castell Trapped Key
   const key = new THREE.Group();
   const brassMat = new THREE.MeshStandardMaterial({ color: 0xd4a024, metalness: 0.86, roughness: 0.24 });
   const bow = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.008, 8, 16), brassMat);
@@ -30,7 +28,6 @@ function createToolProps() {
   key.add(bow, blade, bit);
   props.castell_key = key;
 
-  // 3. Red LOTO Safety Padlock
   const padlock = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.072, 0.032), new THREE.MeshStandardMaterial({ color: 0xc8372d, roughness: 0.42, metalness: 0.2 }));
   const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.005, 8, 16, Math.PI), metalMat);
@@ -38,7 +35,6 @@ function createToolProps() {
   padlock.add(body, shackle);
   props.padlock = padlock;
 
-  // 4. 6.6 kV Insulated Yellow HV Proving Wand
   const wand = new THREE.Group();
   const poleMat = new THREE.MeshStandardMaterial({ color: 0xe6b422, roughness: 0.36, metalness: 0.1 });
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.86, 10), poleMat);
@@ -56,7 +52,6 @@ function createToolProps() {
   wand.add(pole, guard, tipHead, tipPin);
   props.proving_wand = wand;
 
-  // 5. 5 kV Megger Twin HV Test Leads
   const megger = new THREE.Group();
   const redProbe = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.012, 0.22, 8), new THREE.MeshStandardMaterial({ color: 0xd93829, roughness: 0.45 }));
   redProbe.rotation.x = Math.PI / 2;
@@ -67,7 +62,6 @@ function createToolProps() {
   megger.add(redProbe, blkProbe);
   props.megger_leads = megger;
 
-  // 6. Portable Earth CME Hot-Stick & Clamp
   const cme = new THREE.Group();
   const cmePole = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.015, 0.82, 10), new THREE.MeshStandardMaterial({ color: 0xd98a1e, roughness: 0.4 }));
   cmePole.rotation.x = Math.PI / 2;
@@ -77,7 +71,6 @@ function createToolProps() {
   cme.add(cmePole, clamp);
   props.cme_stick = cme;
 
-  // 7. Permit-to-Work Clipboard
   const clipboard = new THREE.Group();
   const board = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.014, 0.29), new THREE.MeshStandardMaterial({ color: 0x3b4856, roughness: 0.55 }));
   const paper = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.016, 0.25), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.85 }));
@@ -93,15 +86,10 @@ function createToolProps() {
   return props;
 }
 
-/**
- * Builds the articulated 3D Marine ETO character (grounded at y = 0, ~1.74m tall)
- * plus a first-person arms & tool rig synced to the exact same PPE and animation state.
- */
 export function createEngineerCharacter() {
   const root = new THREE.Group();
   root.name = 'MarineETOCharacter';
 
-  // Soft radial contact shadow under boots
   const shadowCv = document.createElement('canvas');
   shadowCv.width = 64;
   shadowCv.height = 64;
@@ -120,7 +108,6 @@ export function createEngineerCharacter() {
   contactShadow.position.y = 0.009;
   root.add(contactShadow);
 
-  // Materials
   const coverallMat = new THREE.MeshStandardMaterial({ color: 0x20354b, roughness: 0.82, metalness: 0.05 });
   const arcCoatMat = new THREE.MeshStandardMaterial({ color: 0x3b4f47, roughness: 0.78, metalness: 0.06 });
   const hiVisMat = new THREE.MeshStandardMaterial({ color: 0xe6b830, roughness: 0.42, metalness: 0.25 });
@@ -131,11 +118,9 @@ export function createEngineerCharacter() {
   const stdBootMat = new THREE.MeshStandardMaterial({ color: 0x252b32, roughness: 0.75, metalness: 0.08 });
   const hvBootSoleMat = new THREE.MeshStandardMaterial({ color: 0xd4a024, roughness: 0.62, metalness: 0.08 });
 
-  // Body container (hidden in 1st-person mode while keeping shadow/root intact)
   const bodyRoot = new THREE.Group();
   root.add(bodyRoot);
 
-  // Pelvis / Hips pivot at y = 0.90
   const hips = new THREE.Group();
   hips.position.y = 0.90;
   bodyRoot.add(hips);
@@ -144,7 +129,6 @@ export function createEngineerCharacter() {
   pelvisMesh.castShadow = true;
   hips.add(pelvisMesh);
 
-  // Legs
   function makeLeg(xSign) {
     const hipPivot = new THREE.Group();
     hipPivot.position.set(xSign * 0.10, -0.05, 0);
@@ -163,7 +147,6 @@ export function createEngineerCharacter() {
     shin.castShadow = true;
     kneePivot.add(shin);
 
-    // Boot + dielectric HV yellow sole indicator
     const boot = new THREE.Mesh(new THREE.BoxGeometry(0.125, 0.11, 0.24), stdBootMat);
     boot.position.set(0, -0.39, 0.045);
     boot.castShadow = true;
@@ -181,7 +164,6 @@ export function createEngineerCharacter() {
   const rightLeg = makeLeg(1);
   hips.add(leftLeg.hipPivot, rightLeg.hipPivot);
 
-  // Torso (pivot at waist)
   const torso = new THREE.Group();
   torso.position.y = 0.07;
   hips.add(torso);
@@ -191,14 +173,12 @@ export function createEngineerCharacter() {
   chestMesh.castShadow = true;
   torso.add(chestMesh);
 
-  // High-visibility safety bands across chest & shoulders
   const bandLow = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.045, 0.23), hiVisMat);
   bandLow.position.y = 0.14;
   const bandHigh = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.045, 0.23), hiVisMat);
   bandHigh.position.y = 0.34;
   torso.add(bandLow, bandHigh);
 
-  // 40 cal/cm² Arc-Flash Heavy Coat Overlay (toggled when SIM.ppe.suit === true)
   const arcSuitCoat = new THREE.Group();
   const coatBody = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.58, 0.27), arcCoatMat);
   coatBody.position.y = 0.22;
@@ -211,7 +191,6 @@ export function createEngineerCharacter() {
   arcSuitCoat.visible = false;
   torso.add(arcSuitCoat);
 
-  // Neck & Belt utility detail
   const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.062, 0.08, 10), skinMat);
   neckMesh.position.y = 0.50;
   torso.add(neckMesh);
@@ -222,7 +201,6 @@ export function createEngineerCharacter() {
   pouchMesh.position.set(0.16, 0.02, 0.12);
   torso.add(beltMesh, pouchMesh);
 
-  // Head & Hard Hat / Arc-Flash Hood
   const headGroup = new THREE.Group();
   headGroup.position.y = 0.53;
   torso.add(headGroup);
@@ -232,7 +210,6 @@ export function createEngineerCharacter() {
   headMesh.castShadow = true;
   headGroup.add(headMesh);
 
-  // Clear industrial safety glasses on front face (+Z)
   const glassesBand = new THREE.Mesh(
     new THREE.BoxGeometry(0.16, 0.042, 0.035),
     new THREE.MeshStandardMaterial({ color: 0x22303c, roughness: 0.35, metalness: 0.25 })
@@ -240,7 +217,6 @@ export function createEngineerCharacter() {
   glassesBand.position.set(0, 0.125, 0.085);
   headGroup.add(glassesBand);
 
-  // White Marine ETO Hard Hat
   const hardHat = new THREE.Group();
   const hatDome = new THREE.Mesh(new THREE.SphereGeometry(0.124, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.56), helmetMat);
   hatDome.position.y = 0.155;
@@ -249,7 +225,6 @@ export function createEngineerCharacter() {
   hardHat.add(hatDome, hatBrim);
   headGroup.add(hardHat);
 
-  // 40 cal/cm² Arc-Flash Hood + Green Polycarbonate Visor (toggled when SIM.ppe.suit === true)
   const arcHood = new THREE.Group();
   const hoodShell = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.165, 0.30, 14), arcCoatMat);
   hoodShell.position.y = 0.15;
@@ -261,7 +236,6 @@ export function createEngineerCharacter() {
   arcHood.visible = false;
   headGroup.add(arcHood);
 
-  // Articulated Arms
   function makeArm(xSign) {
     const shoulder = new THREE.Group();
     shoulder.position.set(xSign * 0.245, 0.44, 0);
@@ -284,7 +258,6 @@ export function createEngineerCharacter() {
     bareHand.position.y = -0.28;
     elbow.add(bareHand);
 
-    // Class 2 HV Rubber Gauntlet Glove overlay
     const hvGlove = new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.22, 0.108), gloveMat);
     hvGlove.position.y = -0.22;
     hvGlove.visible = false;
@@ -304,7 +277,6 @@ export function createEngineerCharacter() {
   const thirdPersonTools = createToolProps();
   Object.values(thirdPersonTools).forEach((t) => rightArm.toolSocket.add(t));
 
-  // First-Person View Arms Rig (attached to camera space in controller)
   const fpGroup = new THREE.Group();
   fpGroup.visible = false;
 
@@ -378,11 +350,7 @@ export function createEngineerCharacter() {
     fpGroup.visible = isFirst;
   }
 
-  /**
-   * Procedural skeletal pose solver for locomotion and every physical switchboard task.
-   */
   function updatePose({ speed, walkCycle, elapsed, anim }) {
-    // Reset defaults
     hips.position.y = 0.90;
     torso.rotation.set(0, 0, 0);
     headGroup.rotation.set(0, 0, 0);
@@ -395,7 +363,6 @@ export function createEngineerCharacter() {
     rightArm.shoulder.rotation.set(0, 0, -0.08);
     rightArm.elbow.rotation.set(-0.12, 0, 0);
 
-    // Reset first-person hands cleanly in lower corners
     fpLeftPivot.position.set(-0.27, -0.32, -0.44);
     fpLeftPivot.rotation.set(0.06, -0.14, 0);
     fpRightPivot.position.set(0.27, -0.32, -0.44);
@@ -407,7 +374,6 @@ export function createEngineerCharacter() {
 
       switch (anim.type) {
         case 'don_ppe': {
-          // Two-hand glove roll & pulling visor hood down
           const roll = Math.sin(p * Math.PI * 4) * 0.35;
           torso.rotation.x = 0.08 * bell;
           leftArm.shoulder.rotation.set(-1.15 * bell + roll * 0.2, 0.25 * bell, 0.25 * bell);
@@ -415,7 +381,6 @@ export function createEngineerCharacter() {
           rightArm.shoulder.rotation.set(-1.25 * bell - roll * 0.2, -0.25 * bell, -0.25 * bell);
           rightArm.elbow.rotation.set(-1.1 * bell, 0, 0);
           headGroup.rotation.x = 0.18 * Math.sin(p * Math.PI * 2);
-
           fpLeftPivot.position.set(-0.14, -0.18 + 0.08 * bell, -0.34);
           fpLeftPivot.rotation.z = roll;
           fpRightPivot.position.set(0.14, -0.18 + 0.08 * bell, -0.34);
@@ -423,19 +388,16 @@ export function createEngineerCharacter() {
           break;
         }
         case 'push_button': {
-          // Crisp reach forward and press VCB pushbutton
           const jab = Math.sin(Math.min(1, p * 1.35) * Math.PI);
           torso.rotation.x = 0.10 * jab;
           torso.rotation.y = -0.14 * jab;
           rightArm.shoulder.rotation.set(-1.45 * jab, 0, -0.05);
           rightArm.elbow.rotation.set(-0.25 * (1 - jab), 0, 0);
           leftArm.shoulder.rotation.set(-0.25 * jab, 0, 0.14);
-
           fpRightPivot.position.set(0.16, -0.16 + 0.07 * jab, -0.36 - 0.18 * jab);
           break;
         }
         case 'rack_crank': {
-          // Lean into racking port and crank handle in 3 full circles
           const theta = p * Math.PI * 6;
           const cx = Math.cos(theta) * 0.18;
           const cy = Math.sin(theta) * 0.22;
@@ -445,47 +407,39 @@ export function createEngineerCharacter() {
           rightArm.elbow.rotation.set(-0.78 - cy * 0.5, 0, 0);
           leftArm.shoulder.rotation.set(-0.85 * bell, 0.25 * bell, 0.18);
           leftArm.elbow.rotation.set(-0.65 * bell, 0, 0);
-
           fpRightPivot.position.set(0.15 + cx * 0.35, -0.18 + cy * 0.35, -0.44);
           fpRightPivot.rotation.z = -theta;
           break;
         }
         case 'turn_key': {
-          // Insert Castell key / padlock and twist wrist 90 deg
           const twist = Math.sin(p * Math.PI * 2) * 0.85;
           torso.rotation.x = 0.08 * bell;
           rightArm.shoulder.rotation.set(-1.25 * bell, 0, -0.08);
           rightArm.elbow.rotation.set(-0.55 * bell, twist, 0);
-
           fpRightPivot.position.set(0.16, -0.17 + 0.06 * bell, -0.46);
           fpRightPivot.rotation.z = twist;
           break;
         }
         case 'pull_lever': {
-          // Grip EK6 earth switch lever high and pull firmly downward
           const pull = Math.min(1, p * 1.4);
           const armPitch = -1.75 + pull * 1.05;
           torso.rotation.x = 0.14 * Math.sin(pull * Math.PI);
           rightArm.shoulder.rotation.set(armPitch * bell, 0, -0.12);
           rightArm.elbow.rotation.set(-0.40 * bell, 0, 0);
-
           fpRightPivot.position.set(0.18, -0.08 - pull * 0.18, -0.46);
           fpRightPivot.rotation.x = -pull * 0.55;
           break;
         }
         case 'open_door': {
-          // Pull cubicle door open in horizontal arc
           const sweep = Math.sin(p * Math.PI);
           torso.rotation.y = 0.28 * sweep;
           rightArm.shoulder.rotation.set(-1.15 * sweep, -0.45 * sweep, -0.20 * sweep);
           rightArm.elbow.rotation.set(-0.45 * sweep, 0, 0);
-
           fpRightPivot.position.set(0.18 + 0.12 * sweep, -0.18, -0.46 + 0.10 * sweep);
           break;
         }
         case 'probe_wand':
         case 'megger_test': {
-          // Steady two-hand insulated HV probing / Megger sweep across L1/L2/L3
           const sweepX = Math.sin(p * Math.PI * 3) * 0.24;
           torso.rotation.x = 0.10 * bell;
           torso.rotation.y = sweepX * 0.45;
@@ -493,33 +447,28 @@ export function createEngineerCharacter() {
           rightArm.elbow.rotation.set(-0.35 * bell, 0, 0);
           leftArm.shoulder.rotation.set(-1.05 * bell, 0.35 * bell + sweepX * 0.6, 0.22);
           leftArm.elbow.rotation.set(-0.62 * bell, 0, 0);
-
           fpRightPivot.position.set(0.12 + sweepX * 0.4, -0.18 + 0.05 * bell, -0.46);
           fpLeftPivot.position.set(-0.14 + sweepX * 0.2, -0.22, -0.40);
           break;
         }
         case 'sign_permit': {
-          // Hold PTW clipboard in left hand & sign with right hand
           const scribble = Math.sin(p * Math.PI * 8) * 0.12;
           headGroup.rotation.x = 0.28 * bell;
           leftArm.shoulder.rotation.set(-0.95 * bell, 0.32 * bell, 0.18);
           leftArm.elbow.rotation.set(-1.05 * bell, 0, 0);
           rightArm.shoulder.rotation.set(-0.95 * bell, -0.35 * bell + scribble, -0.15);
           rightArm.elbow.rotation.set(-1.10 * bell, 0, 0);
-
           fpLeftPivot.position.set(-0.16, -0.20, -0.38);
           fpRightPivot.position.set(0.12 + scribble * 0.3, -0.20, -0.40);
           break;
         }
         case 'recoil': {
-          // Defensive step-back recoil on interlock block or arc-flash
           torso.rotation.x = -0.32 * bell;
           hips.position.y = 0.90 - 0.06 * bell;
           leftArm.shoulder.rotation.set(-1.65 * bell, 0.25 * bell, 0.45 * bell);
           leftArm.elbow.rotation.set(-0.95 * bell, 0, 0);
           rightArm.shoulder.rotation.set(-1.65 * bell, -0.25 * bell, -0.45 * bell);
           rightArm.elbow.rotation.set(-0.95 * bell, 0, 0);
-
           fpLeftPivot.position.set(-0.18, -0.12 + 0.10 * bell, -0.30);
           fpRightPivot.position.set(0.18, -0.12 + 0.10 * bell, -0.30);
           break;
@@ -528,7 +477,6 @@ export function createEngineerCharacter() {
       return;
     }
 
-    // Walking / Idle cycle
     const moveBlend = Math.min(1, speed / 1.6);
     if (moveBlend > 0.04) {
       const stride = Math.sin(walkCycle);
@@ -549,11 +497,9 @@ export function createEngineerCharacter() {
       rightArm.shoulder.rotation.x = stride * 0.46 * moveBlend;
       rightArm.elbow.rotation.x = -0.18 - Math.max(0, -stride) * 0.25 * moveBlend;
 
-      // Subtle first-person walk bob
       fpLeftPivot.position.y = -0.32 + Math.sin(walkCycle * 2) * 0.014 * moveBlend;
       fpRightPivot.position.y = -0.32 + Math.cos(walkCycle * 2) * 0.014 * moveBlend;
     } else {
-      // Gentle idle breathing
       const breath = Math.sin(elapsed * 2.1);
       hips.position.y = 0.90 + breath * 0.005;
       leftArm.shoulder.rotation.z = 0.08 + breath * 0.015;

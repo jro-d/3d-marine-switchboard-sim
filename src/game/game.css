@@ -1,87 +1,26 @@
 /* ==========================================================================
    MARINE HV SWITCHROOM — PLAYABLE 3D GAME MODE HUD LAYER
    Inherits design-system/tokens.css (IBM Plex Sans / Mono, Chart Room tokens).
-   Zero backdrop-filter over WebGL to preserve software-WebGL responsiveness.
    ========================================================================== */
 
-body[data-app-mode="game"] .rail,
-body[data-app-mode="game"] .left-panel,
-body[data-app-mode="game"] .cmd-rail,
-body[data-app-mode="game"] .drawer-host,
-body[data-app-mode="game"] .op-column,
-body[data-app-mode="game"] #btnCollapseRight,
-body[data-app-mode="game"] .view-cluster,
-body[data-app-mode="game"] .cad-cluster,
-body[data-app-mode="game"] .parts-strip,
-body[data-app-mode="game"] .stage-hint,
-body[data-app-mode="game"] .busbar-dock,
-body[data-app-mode="game"] .busbar-strip,
-body[data-app-mode="game"] .bottom-status-strip,
-body[data-app-mode="game"] .status-ribbon,
-body[data-app-mode="game"] .callout-layer,
-body[data-app-mode="game"] .callout-svg,
-body[data-app-mode="game"] .quick-action-hud {
-  display: none !important;
-}
-
-body[data-app-mode="game"] .workspace {
-  grid-template-columns: 1fr !important;
-}
-
-body[data-app-mode="game"] .center-viewport {
-  grid-column: 1 / -1 !important;
-  grid-row: 1 !important;
-}
-
-body[data-app-mode="classic"] #hvGameHud {
-  display: none !important;
-}
-
-/* Top bar Game / Classic CAD toggle */
-.app-mode-switch {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px;
-  gap: 2px;
-  border-radius: var(--radius);
-  border: 1px solid var(--line-strong);
-  background: var(--surface-2);
-  flex-shrink: 0;
-}
-
-.app-mode-switch button {
-  min-height: 28px;
-  padding: 0 11px;
-  border: 0;
-  border-radius: calc(var(--radius) - 2px);
-  background: transparent;
-  color: var(--text-2);
-  font: 600 13px/1 var(--font-sans);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.app-mode-switch button.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-1), inset 0 -2px 0 var(--accent);
-}
-
-/* Game HUD overlay root (never blocks 3D canvas except on interactive controls) */
 #hvGameHud {
   position: absolute;
   inset: 0;
   z-index: 22;
   pointer-events: none;
   font-family: var(--font-sans);
+  transition: left 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Top-left compact Mission Objective Card */
+.workspace:not(.left-collapsed) #hvGameHud {
+  left: min(var(--drawer-w), calc(100vw - var(--rail-w) - 420px));
+}
+
 .game-objective-card {
   position: absolute;
   top: 16px;
   left: 16px;
-  width: min(370px, calc(100vw - 32px));
+  width: min(370px, calc(100% - 32px));
   background: rgba(249, 250, 251, 0.96);
   color: var(--text);
   border: 1px solid var(--line-strong);
@@ -146,7 +85,6 @@ body[data-app-mode="classic"] #hvGameHud {
   color: var(--safe);
 }
 
-/* Busy Animation Progress Bar */
 .game-busy-bar {
   position: absolute;
   top: 16px;
@@ -192,13 +130,12 @@ body[data-app-mode="classic"] #hvGameHud {
   transition: width 60ms linear;
 }
 
-/* Contextual Proximity Station Action Panel (lower center above bottom dock) */
 .game-action-panel {
   position: absolute;
   left: 50%;
   bottom: 106px;
   transform: translateX(-50%);
-  width: min(540px, calc(100vw - 32px));
+  width: min(560px, calc(100% - 32px));
   background: rgba(249, 250, 251, 0.97);
   color: var(--text);
   border: 1px solid var(--line-strong);
@@ -289,14 +226,13 @@ body[data-app-mode="classic"] #hvGameHud {
   opacity: 0.85;
 }
 
-/* Unified Collapsible Bottom Game Dock */
 .game-dock-wrap {
   position: absolute;
   left: 50%;
   bottom: 14px;
   transform: translateX(-50%);
   width: fit-content;
-  max-width: calc(100vw - 24px);
+  max-width: calc(100% - 24px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -342,6 +278,11 @@ body[data-app-mode="classic"] #hvGameHud {
   overflow-x: auto;
 }
 
+.workspace:not(.left-collapsed) .game-bottom-dock {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .game-dock-group {
   display: flex;
   align-items: center;
@@ -385,7 +326,6 @@ body[data-app-mode="classic"] #hvGameHud {
   white-space: nowrap;
 }
 
-/* First-person subtle center reticle */
 .game-fp-reticle {
   position: absolute;
   top: 50%;
