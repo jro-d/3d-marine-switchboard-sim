@@ -45,6 +45,7 @@ test('serves built index.html and bundled Vite assets with 200 OK', async () => 
     const missingRes = await fetch(`${base}/does-not-exist-check.txt`);
     assert.equal(missingRes.status, 404);
   } finally {
+    server.closeAllConnections?.();
     await new Promise((resolve) => server.close(resolve));
   }
 });

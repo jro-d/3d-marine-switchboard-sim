@@ -16,6 +16,7 @@ const PART_KEYS = [
 export function buildLVBay({ bayX, MAT, SHARED_TEX, helpers }) {
   const {
     regMesh,
+    createSocket,
     buildPadlock3D,
     buildCastellKey3D,
     addFasteners,
@@ -226,12 +227,18 @@ export function buildLVBay({ bayX, MAT, SHARED_TEX, helpers }) {
   acbBezel.position.set(0, 0.98, 0.456);
   const acbTripScreen = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.085, 0.010), MAT.iedCase), 'MF', cubId);
   acbTripScreen.position.set(-0.10, 0.98, 0.460);
-  const acbBtnClose = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.014, 14), MAT.shutterRed), 'MF', cubId, { controlId: 'closeBtn' });
+  const acbBtnClose = regMesh(
+    new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.016, 16), MAT.shutterRed),
+    'MF', cubId, { controlId: 'closeBtn', cloneMaterial: true }
+  );
   acbBtnClose.rotation.x = Math.PI / 2;
-  acbBtnClose.position.set(0.02, 1.03, 0.462);
-  const acbBtnOpen = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.014, 14), MAT.earthGreen), 'MF', cubId, { controlId: 'tripBtn' });
+  acbBtnClose.position.set(0.02, 1.03, 0.464);
+  const acbBtnOpen = regMesh(
+    new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.016, 16), MAT.earthGreen),
+    'MF', cubId, { controlId: 'tripBtn', cloneMaterial: true }
+  );
   acbBtnOpen.rotation.x = Math.PI / 2;
-  acbBtnOpen.position.set(0.02, 0.96, 0.462);
+  acbBtnOpen.position.set(0.02, 0.96, 0.464);
   const acbFlag = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.048, 0.012), MAT.shutterRed), 'MF', cubId, { cloneMaterial: true });
   acbFlag.position.set(-0.06, 1.10, 0.462);
   const acbChargeLever = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.15, 0.022), MAT.shutterYellow), 'MF', cubId);
@@ -277,14 +284,25 @@ export function buildLVBay({ bayX, MAT, SHARED_TEX, helpers }) {
     });
   }
 
-  const acbPadlock = buildPadlock3D('MF', cubId);
-  acbPadlock.position.set(-0.10, 0.86, 0.468);
+  const acbPadlockHasp = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.028, 0.016), MAT.steelTrim), 'MF', cubId, { controlId: 'rackingPadlock', cloneMaterial: true });
+  acbPadlockHasp.position.set(-0.10, 0.86, 0.464);
+  subGroups.MF.add(acbPadlockHasp);
+
+  const acbPadlock = buildPadlock3D('MF', cubId, { controlId: 'rackingPadlock' });
+  acbPadlock.position.set(-0.10, 0.86, 0.472);
   acbPadlock.visible = false;
   subGroups.MF.add(acbPadlock);
 
-  const acbKey = buildCastellKey3D('MF', cubId);
-  acbKey.position.set(0.08, 0.86, 0.460);
+  const acbKey = buildCastellKey3D('MF', cubId, { controlId: 'castellVcb' });
+  acbKey.position.set(0.08, 0.86, 0.462);
   subGroups.MF.add(acbKey);
+
+  const sockets = {
+    closeBtn: createSocket(subGroups.MF, 'closeBtn', cubId, [0.02, 1.03, 0.474], { approachOffset: { x: 0.02, z: 1.36 } }),
+    tripBtn: createSocket(subGroups.MF, 'tripBtn', cubId, [0.02, 0.96, 0.474], { approachOffset: { x: 0.02, z: 1.36 } }),
+    rackingPadlock: createSocket(subGroups.MF, 'rackingPadlock', cubId, [-0.10, 0.86, 0.476], { approachOffset: { x: -0.08, z: 1.36 } }),
+    castellVcb: createSocket(subGroups.MF, 'castellVcb', cubId, [0.08, 0.86, 0.486], { approachOffset: { x: 0.08, z: 1.36 } }),
+  };
 
   // BB & CT
   [1.54, 1.66, 1.78, 1.90].forEach((by) => {
@@ -341,6 +359,7 @@ export function buildLVBay({ bayX, MAT, SHARED_TEX, helpers }) {
     bayX,
     root,
     subGroups,
+    sockets,
     acbFlag,
     acbPadlock,
     acbKey,

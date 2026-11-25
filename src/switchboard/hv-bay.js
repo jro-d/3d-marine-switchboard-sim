@@ -17,6 +17,7 @@ const PART_KEYS = [
 export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT, SHARED_TEX, helpers }) {
   const {
     regMesh,
+    createSocket,
     buildPadlock3D,
     buildCastellKey3D,
     buildHelicalSpring,
@@ -36,6 +37,7 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
 
   const W = 0.80;
   const subGroups = {};
+  const sockets = {};
   PART_KEYS.forEach((k) => { subGroups[k] = new THREE.Group(); });
 
   ['SK', 'CF', 'AR', 'FD', 'LD', 'PR', 'RL', 'TC', 'SS', 'SP', 'ES', 'BB', 'CT'].forEach((k) => {
@@ -96,8 +98,8 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
     });
   });
 
-  const vcbDeck = regMesh(new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.018, 0.68), MAT.galvSteel), 'CF', cubId);
-  vcbDeck.position.set(0, 0.475, 0.19);
+  const vcbDeck = regMesh(new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.018, 0.60), MAT.galvSteel), 'CF', cubId);
+  vcbDeck.position.set(0, 0.475, 0.14);
   const lvDeck = regMesh(new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.018, 0.56), MAT.galvSteel), 'CF', cubId);
   lvDeck.position.set(0, 1.50, 0.25);
   const busDeck = regMesh(new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.016, 0.44), MAT.galvSteel), 'CF', cubId);
@@ -166,6 +168,14 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   winHole.closePath();
   doorShape.holes.push(winHole);
 
+  const opHole = new THREE.Path();
+  opHole.moveTo(dW * 0.16, -0.38);
+  opHole.lineTo(dW * 0.84, -0.38);
+  opHole.lineTo(dW * 0.84, -0.22);
+  opHole.lineTo(dW * 0.16, -0.22);
+  opHole.closePath();
+  doorShape.holes.push(opHole);
+
   const doorGeo = new THREE.ExtrudeGeometry(doorShape, {
     depth: 0.018,
     bevelEnabled: true,
@@ -190,6 +200,18 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   rgtBezel.position.set(bR + 0.01, (bB + bT) * 0.5, 0.022);
   doorHingeGroup.add(topBezel, botBezel, lftBezel, rgtBezel);
 
+  // Operating port cutout trim
+  [
+    [(bL + bR) * 0.5, -0.212, bR - bL + 0.028, 0.014],
+    [(bL + bR) * 0.5, -0.388, bR - bL + 0.028, 0.014],
+    [bL - 0.007, -0.30, 0.014, 0.162],
+    [bR + 0.007, -0.30, 0.014, 0.162],
+  ].forEach(([bx, by, bw, bh]) => {
+    const trim = regMesh(new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.008), MAT.darkConsole), 'FD', cubId, { castShadow: false });
+    trim.position.set(bx, by, 0.021);
+    doorHingeGroup.add(trim);
+  });
+
   addFasteners(doorHingeGroup, 'FD', cubId, rectPoints(bL - 0.01, bR + 0.01, bB - 0.01, bT + 0.01, 0.068, 'xy', 0.027), { r: 0.0040, h: 0.0034, mat: MAT.silverContact });
   [
     [(bL + bR) / 2, bT - 0.004, bR - bL, 0.008],
@@ -213,22 +235,36 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
     doorHingeGroup.add(hinge);
   });
 
-  const handleEsc = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.19, 0.014), MAT.darkConsole), 'FD', cubId);
+  const handleEsc = regMesh(
+    new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.19, 0.014), MAT.darkConsole),
+    'FD', cubId, { controlId: 'doorHandle', cloneMaterial: true }
+  );
   handleEsc.position.set(dW - 0.048, 0.02, 0.024);
-  const handleLever = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.13, 0.024), MAT.silverContact), 'FD', cubId);
-  handleLever.position.set(dW - 0.048, 0.00, 0.036);
+  const handleLever = regMesh(
+    new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.13, 0.026), MAT.silverContact),
+    'FD', cubId, { controlId: 'doorHandle', cloneMaterial: true }
+  );
+  handleLever.position.set(dW - 0.048, 0.00, 0.037);
   const latchRod = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.88, 10), MAT.galvSteel), 'FD', cubId);
   latchRod.position.set(dW - 0.055, 0.0, -0.008);
   doorHingeGroup.add(handleEsc, handleLever, latchRod);
+  sockets.doorHandle = createSocket(doorHingeGroup, 'doorHandle', cubId, [dW - 0.048, 0.0, 0.048], {
+    approachOffset: { x: 0.24, z: 1.38 },
+  });
 
-  const lowerDoor = regMesh(new THREE.Mesh(new THREE.BoxGeometry(dW, 0.38, 0.016), MAT.steelPanel), 'FD', cubId);
-  lowerDoor.position.set(0, 0.27, 0.556);
-  subGroups.FD.add(lowerDoor);
-  for (let ly = 0.15; ly <= 0.25; ly += 0.032) {
+  // Hinged lower cable & earth inspection door
+  const lowerDoorHingeGroup = new THREE.Group();
+  lowerDoorHingeGroup.position.set(-W / 2 + 0.016, 0.255, 0.556);
+  subGroups.FD.add(lowerDoorHingeGroup);
+
+  const lowerDoor = regMesh(new THREE.Mesh(new THREE.BoxGeometry(dW, 0.355, 0.016), MAT.steelPanel), 'FD', cubId);
+  lowerDoor.position.set(dW * 0.5, 0, 0);
+  lowerDoorHingeGroup.add(lowerDoor);
+  for (let ly = -0.105; ly <= -0.005; ly += 0.032) {
     const louver = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.012, 0.010), MAT.louverBlack), 'FD', cubId);
-    louver.position.set(0, ly, 0.566);
+    louver.position.set(dW * 0.5, ly, 0.010);
     louver.rotation.x = 0.35;
-    subGroups.FD.add(louver);
+    lowerDoorHingeGroup.add(louver);
   }
 
   const hazardPlate = regMesh(
@@ -239,36 +275,41 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   doorHingeGroup.add(hazardPlate);
 
   const ventOpening = regMesh(new THREE.Mesh(new THREE.PlaneGeometry(0.40, 0.13), new THREE.MeshStandardMaterial({ color: 0x1d242b, roughness: 0.8 })), 'FD', cubId, { castShadow: false });
-  ventOpening.position.set(0, 0.20, 0.5646);
-  subGroups.FD.add(ventOpening);
-  [0.27, 0.13].forEach((vy) => {
+  ventOpening.position.set(dW * 0.5, -0.055, 0.0086);
+  lowerDoorHingeGroup.add(ventOpening);
+  [0.015, -0.125].forEach((vy) => {
     const vbar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.012, 0.006), MAT.louverBlack), 'FD', cubId, { castShadow: false });
-    vbar.position.set(0, vy, 0.5655);
-    subGroups.FD.add(vbar);
+    vbar.position.set(dW * 0.5, vy, 0.0095);
+    lowerDoorHingeGroup.add(vbar);
   });
   [-0.206, 0.206].forEach((vx) => {
     const vbar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.14, 0.006), MAT.louverBlack), 'FD', cubId, { castShadow: false });
-    vbar.position.set(vx, 0.20, 0.5655);
-    subGroups.FD.add(vbar);
+    vbar.position.set(dW * 0.5 + vx, -0.055, 0.0095);
+    lowerDoorHingeGroup.add(vbar);
   });
   const coverLabel = regMesh(new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.0475), new THREE.MeshStandardMaterial({ map: SHARED_TEX.coverLabel, roughness: 0.4 })), 'FD', cubId, { castShadow: false });
-  coverLabel.position.set(0, 0.395, 0.5646);
-  subGroups.FD.add(coverLabel);
-  [[-0.35, 0.115], [0.35, 0.115], [-0.35, 0.425], [0.35, 0.425]].forEach(([sx, sy]) => {
+  coverLabel.position.set(dW * 0.5, 0.125, 0.0088);
+  const lowerLatch = regMesh(
+    new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.085, 0.018), MAT.silverContact),
+    'FD', cubId, { controlId: 'doorHandle', cloneMaterial: true }
+  );
+  lowerLatch.position.set(dW - 0.048, 0.08, 0.016);
+  lowerDoorHingeGroup.add(coverLabel, lowerLatch);
+  [[dW * 0.5 - 0.35, -0.14], [dW * 0.5 + 0.35, -0.14], [dW * 0.5 - 0.35, 0.145], [dW * 0.5 + 0.35, 0.145]].forEach(([sx, sy]) => {
     const screw = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0075, 0.006, 10), MAT.galvSteel), 'FD', cubId, { castShadow: false });
     screw.rotation.x = Math.PI / 2;
-    screw.position.set(sx, sy, 0.5668);
-    subGroups.FD.add(screw);
+    screw.position.set(sx, sy, 0.0112);
+    lowerDoorHingeGroup.add(screw);
   });
 
-  const tagDangerMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.23, 0.072), new THREE.MeshStandardMaterial({ map: SHARED_TEX.tagDanger, roughness: 0.4 }));
-  tagDangerMesh.position.set(dW * 0.31, -0.27, 0.024);
+  const tagDangerMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.056), new THREE.MeshStandardMaterial({ map: SHARED_TEX.tagDanger, roughness: 0.4 }));
+  tagDangerMesh.position.set(dW * 0.25, -0.436, 0.024);
   tagDangerMesh.visible = false;
-  const tagEarthMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.23, 0.072), new THREE.MeshStandardMaterial({ map: SHARED_TEX.tagEarth, roughness: 0.4 }));
-  tagEarthMesh.position.set(dW * 0.69, -0.27, 0.024);
+  const tagEarthMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.056), new THREE.MeshStandardMaterial({ map: SHARED_TEX.tagEarth, roughness: 0.4 }));
+  tagEarthMesh.position.set(dW * 0.50, -0.436, 0.024);
   tagEarthMesh.visible = false;
-  const tagSftMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.072), new THREE.MeshStandardMaterial({ map: SHARED_TEX.tagSft, roughness: 0.4 }));
-  tagSftMesh.position.set(dW * 0.50, -0.37, 0.024);
+  const tagSftMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.056), new THREE.MeshStandardMaterial({ map: SHARED_TEX.tagSft, roughness: 0.4 }));
+  tagSftMesh.position.set(dW * 0.75, -0.436, 0.024);
   tagSftMesh.visible = false;
   doorHingeGroup.add(tagDangerMesh, tagEarthMesh, tagSftMesh);
 
@@ -732,13 +773,35 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
     shroud.position.set(bx, 0.96, 0.403);
     subGroups.MF.add(shroud);
   });
-  const btnClose3D = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.019, 0.018, 16), MAT.shutterRed), 'MF', cubId, { controlId: 'closeBtn' });
+  const btnClose3D = regMesh(
+    new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.019, 0.018, 16), MAT.shutterRed),
+    'MF', cubId, { controlId: 'closeBtn', cloneMaterial: true }
+  );
   btnClose3D.rotation.x = Math.PI / 2;
   btnClose3D.position.set(-0.12, 0.96, 0.405);
+  const btnCloseCap = regMesh(
+    new THREE.Mesh(
+      new THREE.CircleGeometry(0.015, 20),
+      new THREE.MeshStandardMaterial({ map: SHARED_TEX.btnCloseCap, roughness: 0.35 })
+    ),
+    'MF', cubId, { controlId: 'closeBtn', cloneMaterial: true, castShadow: false, noRefine: true }
+  );
+  btnCloseCap.position.set(-0.12, 0.96, 0.415);
 
-  const btnTrip3D = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.019, 0.018, 16), MAT.earthGreen), 'MF', cubId, { controlId: 'tripBtn' });
+  const btnTrip3D = regMesh(
+    new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.019, 0.018, 16), MAT.earthGreen),
+    'MF', cubId, { controlId: 'tripBtn', cloneMaterial: true }
+  );
   btnTrip3D.rotation.x = Math.PI / 2;
   btnTrip3D.position.set(-0.02, 0.96, 0.405);
+  const btnTripCap = regMesh(
+    new THREE.Mesh(
+      new THREE.CircleGeometry(0.015, 20),
+      new THREE.MeshStandardMaterial({ map: SHARED_TEX.btnOpenCap, roughness: 0.35 })
+    ),
+    'MF', cubId, { controlId: 'tripBtn', cloneMaterial: true, castShadow: false, noRefine: true }
+  );
+  btnTripCap.position.set(-0.02, 0.96, 0.415);
 
   [
     { wx: -0.11, wy: 0.85, w: 0.090, h: 0.044 },
@@ -773,20 +836,20 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   chargeGrip.position.set(0.16, 0.785, 0.412);
   subGroups.MF.add(chargePivotBoss, chargeGrip);
 
-  const rackFlange = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.008, 18), MAT.galvSteel), 'MF', cubId);
+  const rackFlange = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.008, 18), MAT.galvSteel), 'MF', cubId, { controlId: 'rackPort', cloneMaterial: true });
   rackFlange.rotation.x = Math.PI / 2;
   rackFlange.position.set(0, 0.68, 0.401);
-  const rackPort = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.020, 16), MAT.steelTrim), 'MF', cubId, { controlId: 'rackPort' });
+  const rackPort = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.020, 16), MAT.steelTrim), 'MF', cubId, { controlId: 'rackPort', cloneMaterial: true });
   rackPort.rotation.x = Math.PI / 2;
   rackPort.position.set(0, 0.68, 0.404);
-  const rackHex = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.024, 6), MAT.brass), 'MF', cubId, { controlId: 'rackPort' });
+  const rackHex = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.024, 6), MAT.brass), 'MF', cubId, { controlId: 'rackPort', cloneMaterial: true });
   rackHex.rotation.x = Math.PI / 2;
   rackHex.position.set(0, 0.68, 0.406);
-  const rackShutterFlap = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.016, 0.006), MAT.brass), 'MF', cubId);
+  const rackShutterFlap = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.016, 0.006), MAT.brass), 'MF', cubId, { controlId: 'rackPort', cloneMaterial: true });
   rackShutterFlap.position.set(0, 0.68, 0.415);
-  const lotoHaspBracket = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.026, 0.016), MAT.steelTrim), 'MF', cubId);
-  lotoHaspBracket.position.set(0.042, 0.68, 0.406);
-  subGroups.MF.add(btnClose3D, btnTrip3D, flagOpenClose, flagSpring, flagTruckPos, counterMesh, chargeHandle, rackFlange, rackPort, rackHex, rackShutterFlap, lotoHaspBracket);
+  const lotoHaspBracket = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.028, 0.018), MAT.steelTrim), 'MF', cubId, { controlId: 'rackingPadlock', cloneMaterial: true });
+  lotoHaspBracket.position.set(0.044, 0.68, 0.406);
+  subGroups.MF.add(btnClose3D, btnCloseCap, btnTrip3D, btnTripCap, flagOpenClose, flagSpring, flagTruckPos, counterMesh, chargeHandle, rackFlange, rackPort, rackHex, rackShutterFlap, lotoHaspBracket);
 
   const rearInterlockBarV = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.26, 0.008), MAT.brass), 'MF', cubId);
   rearInterlockBarV.position.set(-0.14, 0.81, 0.358);
@@ -800,14 +863,20 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   });
   subGroups.MF.add(rearInterlockBarV, rearInterlockBarH);
 
-  const rackingPadlock3D = buildPadlock3D('MF', cubId);
-  rackingPadlock3D.position.set(0.048, 0.672, 0.416);
+  const rackingPadlock3D = buildPadlock3D('MF', cubId, { controlId: 'rackingPadlock' });
+  rackingPadlock3D.position.set(0.048, 0.672, 0.418);
   rackingPadlock3D.visible = false;
   subGroups.MF.add(rackingPadlock3D);
 
-  const vcbCastellKey3D = buildCastellKey3D('MF', cubId);
-  vcbCastellKey3D.position.set(-0.14, 0.70, 0.402);
+  const vcbCastellKey3D = buildCastellKey3D('MF', cubId, { controlId: 'castellVcb' });
+  vcbCastellKey3D.position.set(-0.14, 0.70, 0.404);
   subGroups.MF.add(vcbCastellKey3D);
+
+  sockets.closeBtn = createSocket(subGroups.MF, 'closeBtn', cubId, [-0.12, 0.96, 0.418], { approachOffset: { x: -0.10, z: 1.36 } });
+  sockets.tripBtn = createSocket(subGroups.MF, 'tripBtn', cubId, [-0.02, 0.96, 0.418], { approachOffset: { x: -0.02, z: 1.36 } });
+  sockets.rackPort = createSocket(subGroups.MF, 'rackPort', cubId, [0, 0.68, 0.420], { approachOffset: { x: 0.0, z: 1.38 } });
+  sockets.rackingPadlock = createSocket(subGroups.MF, 'rackingPadlock', cubId, [0.048, 0.672, 0.426], { approachOffset: { x: 0.05, z: 1.36 } });
+  sockets.castellVcb = createSocket(subGroups.MF, 'castellVcb', cubId, [-0.14, 0.70, 0.428], { approachOffset: { x: -0.14, z: 1.36 } });
 
   /* 11 · AX: 58-PIN UMBILICAL AUXILIARY CONTROL PLUG, BAILS & CONDUIT */
   const auxFlange = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.012, 0.082), MAT.steelTrim), 'AX', cubId);
@@ -1055,7 +1124,7 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   /* 15 · SS: AUTOMATIC RED & YELLOW IP2X SAFETY SHUTTERS & SCISSOR LINKAGES */
   const shutterUpper = regMesh(
     new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.135, 0.012), new THREE.MeshStandardMaterial({ map: SHARED_TEX.shutterRed, roughness: 0.4, metalness: 0.15 })),
-    'SS', cubId
+    'SS', cubId, { controlId: 'shutterPadlock', cloneMaterial: true }
   );
   shutterUpper.position.set(0, 1.20, -0.048);
   const shutterLower = regMesh(
@@ -1074,10 +1143,18 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
     subGroups.SS.add(track, arm1);
   });
 
-  const redShutterPadlock3D = buildPadlock3D('SS', cubId);
-  redShutterPadlock3D.position.set(0.26, 1.20, -0.026);
+  const redShutterHasp = regMesh(
+    new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.034, 0.022), MAT.steelTrim),
+    'SS', cubId, { controlId: 'shutterPadlock', cloneMaterial: true }
+  );
+  redShutterHasp.position.set(0.26, 1.20, -0.038);
+  subGroups.SS.add(redShutterHasp);
+
+  const redShutterPadlock3D = buildPadlock3D('SS', cubId, { controlId: 'shutterPadlock' });
+  redShutterPadlock3D.position.set(0.26, 1.20, -0.022);
   redShutterPadlock3D.visible = false;
   subGroups.SS.add(redShutterPadlock3D);
+  sockets.shutterPadlock = createSocket(subGroups.SS, 'shutterPadlock', cubId, [0.26, 1.20, -0.016], { approachOffset: { x: 0.24, z: 1.28 } });
 
   /* 16 · SP: STATIONARY MONOBLOC SPOUT BUSHINGS & FIXED COPPER CONTACT PINS */
   const spoutBulkhead = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.74, 0.020), MAT.galvSteel), 'SP', cubId);
@@ -1102,30 +1179,74 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   });
 
   /* 17 · ES: INTEGRAL EK6 EARTH SWITCH, DOUBLE KNIVES, PE BAR, KEYS & CME */
-  const peBusbar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.036, 0.022), MAT.earthGreen), 'ES', cubId, { terminalId: 'PE' });
-  peBusbar.position.set(0, 0.13, 0.24);
-  const peCopperCore = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.024, 0.026), MAT.copper), 'ES', cubId, { terminalId: 'PE' });
-  peCopperCore.position.set(0, 0.13, 0.24);
-  const peLug = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.034, 16), MAT.earthGreen), 'ES', cubId, { terminalId: 'PE' });
+  const peBusbar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.034, 0.022), MAT.earthGreen), 'ES', cubId, { terminalId: 'PE', cloneMaterial: true });
+  peBusbar.position.set(0, 0.14, 0.44);
+  const peCopperCore = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.022, 0.026), MAT.copper), 'ES', cubId, { terminalId: 'PE', cloneMaterial: true });
+  peCopperCore.position.set(0, 0.14, 0.44);
+  const peLug = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.044, 16), MAT.earthGreen), 'ES', cubId, { terminalId: 'PE', cloneMaterial: true });
   peLug.rotation.x = Math.PI / 2;
-  peLug.position.set(-0.28, 0.13, 0.268);
-  subGroups.ES.add(peBusbar, peCopperCore, peLug);
+  peLug.position.set(-0.28, 0.14, 0.465);
+  const pePlacard = regMesh(
+    new THREE.Mesh(new THREE.PlaneGeometry(0.075, 0.036), new THREE.MeshStandardMaterial({ map: SHARED_TEX.phasePE, roughness: 0.38 })),
+    'ES', cubId, { terminalId: 'PE', cloneMaterial: true, castShadow: false }
+  );
+  pePlacard.position.set(-0.28, 0.095, 0.468);
+  const peHitProxy = regMesh(
+    new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.10, 12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })),
+    'ES', cubId, { terminalId: 'PE', isHitProxy: true, castShadow: false, receiveShadow: false, noRefine: true }
+  );
+  peHitProxy.rotation.x = Math.PI / 2;
+  peHitProxy.position.set(-0.28, 0.14, 0.472);
+  subGroups.ES.add(peBusbar, peCopperCore, peLug, pePlacard, peHitProxy);
 
   const phaseNames = ['L1', 'L2', 'L3'];
   const phaseMats = [MAT.phaseL1, MAT.phaseL2, MAT.phaseL3];
-  const termCoords = { PE: new THREE.Vector3(-0.28, 0.13, 0.275) };
+  const phaseTexs = [SHARED_TEX.phaseL1, SHARED_TEX.phaseL2, SHARED_TEX.phaseL3];
+  const termCoords = { PE: new THREE.Vector3(-0.28, 0.14, 0.478) };
+  const terminalStatusRings = {};
+  sockets.PE = createSocket(subGroups.ES, 'PE', cubId, [-0.28, 0.14, 0.478], { approachOffset: { x: -0.24, z: 1.28 } });
 
-  [-0.19, 0.0, 0.19].forEach((px, idx) => {
+  [-0.20, 0.0, 0.20].forEach((px, idx) => {
     const pName = phaseNames[idx];
-    const jawBar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.22, 0.016), MAT.copper), 'ES', cubId, { terminalId: pName });
-    jawBar.position.set(px, 0.39, 0.165);
-    const sleeve = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.06, 0.020), phaseMats[idx]), 'ES', cubId, { terminalId: pName });
-    sleeve.position.set(px, 0.45, 0.165);
-    const lug = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.034, 16), MAT.brass), 'ES', cubId, { terminalId: pName });
+    const jawBar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.22, 0.020), MAT.copper), 'ES', cubId, { terminalId: pName, cloneMaterial: true });
+    jawBar.position.set(px, 0.33, 0.22);
+    const stabArm = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.024, 0.24), MAT.copper), 'ES', cubId, { terminalId: pName, cloneMaterial: true });
+    stabArm.position.set(px, 0.31, 0.34);
+    const sleeve = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.044, 0.068), phaseMats[idx]), 'ES', cubId, { terminalId: pName, cloneMaterial: true });
+    sleeve.position.set(px, 0.31, 0.39);
+    const lug = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.048, 18), MAT.brass), 'ES', cubId, { terminalId: pName, cloneMaterial: true });
     lug.rotation.x = Math.PI / 2;
-    lug.position.set(px, 0.34, 0.19);
-    subGroups.ES.add(jawBar, sleeve, lug);
-    termCoords[pName] = new THREE.Vector3(px, 0.34, 0.215);
+    lug.position.set(px, 0.31, 0.458);
+    const lugTip = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.019, 0.022, 16), MAT.copper), 'ES', cubId, { terminalId: pName, cloneMaterial: true });
+    lugTip.rotation.x = Math.PI / 2;
+    lugTip.position.set(px, 0.31, 0.484);
+
+    const statusRing = regMesh(
+      new THREE.Mesh(new THREE.TorusGeometry(0.029, 0.0048, 10, 24), MAT.darkConsole),
+      'ES', cubId, { terminalId: pName, cloneMaterial: true, castShadow: false }
+    );
+    statusRing.position.set(px, 0.31, 0.478);
+    terminalStatusRings[pName] = statusRing;
+
+    const placard = regMesh(
+      new THREE.Mesh(new THREE.PlaneGeometry(0.088, 0.044), new THREE.MeshStandardMaterial({ map: phaseTexs[idx], roughness: 0.38 })),
+      'ES', cubId, { terminalId: pName, cloneMaterial: true, castShadow: false }
+    );
+    placard.position.set(px, 0.382, 0.468);
+    placard.rotation.x = -0.28;
+
+    const hitProxy = regMesh(
+      new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.13, 12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })),
+      'ES', cubId, { terminalId: pName, isHitProxy: true, castShadow: false, receiveShadow: false, noRefine: true }
+    );
+    hitProxy.rotation.x = Math.PI / 2;
+    hitProxy.position.set(px, 0.32, 0.468);
+
+    subGroups.ES.add(jawBar, stabArm, sleeve, lug, lugTip, statusRing, placard, hitProxy);
+    termCoords[pName] = new THREE.Vector3(px, 0.31, 0.494);
+    sockets[pName] = createSocket(subGroups.ES, pName, cubId, [px, 0.31, 0.494], {
+      approachOffset: { x: px, z: 1.24 },
+    });
   });
 
   const earthBladePivot = new THREE.Group();
@@ -1134,40 +1255,60 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   earthShaft.rotation.z = Math.PI / 2;
   earthBladePivot.add(earthShaft);
 
-  [-0.19, 0.0, 0.19].forEach((px) => {
-    [-0.014, 0.014].forEach((bx) => {
-      const blade = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.235, 0.014), MAT.copper), 'ES', cubId);
-      blade.position.set(px + bx, 0.115, -0.022);
+  [-0.20, 0.0, 0.20].forEach((px) => {
+    [-0.015, 0.015].forEach((bx) => {
+      const blade = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.225, 0.014), MAT.copper), 'ES', cubId);
+      blade.position.set(px + bx, 0.11, -0.012);
       earthBladePivot.add(blade);
     });
   });
   const crossBeam = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.024, 0.022), MAT.epoxyPole), 'ES', cubId);
-  crossBeam.position.set(0, 0.14, -0.022);
+  crossBeam.position.set(0, 0.14, -0.012);
   earthBladePivot.add(crossBeam);
   subGroups.ES.add(earthBladePivot);
 
+  // Fixed mid-rail between VCB door & lower cable compartment door housing EK6 socket, padlock & Castell keys
+  const ek6RailBar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(dW, 0.056, 0.020), MAT.darkConsole), 'ES', cubId);
+  ek6RailBar.position.set(0, 0.468, 0.556);
+  const ek6RailFace = regMesh(
+    new THREE.Mesh(new THREE.PlaneGeometry(dW - 0.04, 0.048), new THREE.MeshStandardMaterial({ map: SHARED_TEX.ek6RailPlate, roughness: 0.4 })),
+    'ES', cubId, { castShadow: false }
+  );
+  ek6RailFace.position.set(0, 0.468, 0.567);
+  subGroups.ES.add(ek6RailBar, ek6RailFace);
+
   const driveRod = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.34, 10), MAT.galvSteel), 'ES', cubId);
   driveRod.rotation.x = Math.PI / 2;
-  driveRod.position.set(-0.18, 0.34, 0.39);
-  const earthSocket = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.024, 16), MAT.steelTrim), 'ES', cubId, { controlId: 'ek6Socket' });
+  driveRod.position.set(-0.18, 0.468, 0.39);
+  const earthSocket = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.026, 16), MAT.steelTrim), 'ES', cubId, { controlId: 'ek6Socket', cloneMaterial: true });
   earthSocket.rotation.x = Math.PI / 2;
-  earthSocket.position.set(-0.18, 0.34, 0.568);
-  subGroups.ES.add(driveRod, earthSocket);
+  earthSocket.position.set(-0.18, 0.468, 0.574);
+  const earthSocketHex = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.028, 6), MAT.brass), 'ES', cubId, { controlId: 'ek6Socket', cloneMaterial: true });
+  earthSocketHex.rotation.x = Math.PI / 2;
+  earthSocketHex.position.set(-0.18, 0.468, 0.576);
+  const earthHaspBracket = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.026, 0.018), MAT.steelTrim), 'ES', cubId, { controlId: 'ek6Padlock', cloneMaterial: true });
+  earthHaspBracket.position.set(-0.11, 0.466, 0.574);
+  subGroups.ES.add(driveRod, earthSocket, earthSocketHex, earthHaspBracket);
 
-  const earthPadlock3D = buildPadlock3D('ES', cubId);
-  earthPadlock3D.position.set(-0.12, 0.33, 0.582);
+  const earthPadlock3D = buildPadlock3D('ES', cubId, { controlId: 'ek6Padlock' });
+  earthPadlock3D.position.set(-0.11, 0.462, 0.586);
   earthPadlock3D.visible = false;
   subGroups.ES.add(earthPadlock3D);
 
-  const earthKey1 = buildCastellKey3D('ES', cubId);
-  earthKey1.position.set(0.08, 0.34, 0.568);
+  const earthKey1 = buildCastellKey3D('ES', cubId, { controlId: 'earthKey1' });
+  earthKey1.position.set(0.08, 0.468, 0.574);
   subGroups.ES.add(earthKey1);
+
+  sockets.ek6Socket = createSocket(subGroups.ES, 'ek6Socket', cubId, [-0.18, 0.468, 0.588], { approachOffset: { x: -0.18, z: 1.36 } });
+  sockets.ek6Padlock = createSocket(subGroups.ES, 'ek6Padlock', cubId, [-0.11, 0.462, 0.592], { approachOffset: { x: -0.11, z: 1.36 } });
+  sockets.earthKey1 = createSocket(subGroups.ES, 'earthKey1', cubId, [0.08, 0.468, 0.592], { approachOffset: { x: 0.08, z: 1.36 } });
 
   let earthKey2 = null;
   if (cubId === 'TR1-HV') {
-    earthKey2 = buildCastellKey3D('ES', cubId);
-    earthKey2.position.set(0.20, 0.34, 0.568);
+    earthKey2 = buildCastellKey3D('ES', cubId, { controlId: 'earthKey2' });
+    earthKey2.position.set(0.20, 0.468, 0.574);
     subGroups.ES.add(earthKey2);
+    sockets.earthKey2 = createSocket(subGroups.ES, 'earthKey2', cubId, [0.20, 0.468, 0.592], { approachOffset: { x: 0.20, z: 1.36 } });
   }
 
   const cmeMeshes = {};
@@ -1332,8 +1473,11 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
     bayX,
     root,
     subGroups,
+    sockets,
     arFlaps,
     doorHingeGroup,
+    lowerDoorHingeGroup,
+    terminalStatusRings,
     wheelGroups,
     leadScrew,
     flagOpenClose,

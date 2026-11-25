@@ -218,9 +218,29 @@ export function createMeshHelpers(MAT, allRegisteredMeshes) {
       cubId,
       terminalId: opts.terminalId || null,
       controlId: opts.controlId || null,
+      isHitProxy: Boolean(opts.isHitProxy),
     };
     allRegisteredMeshes.push(mesh);
     return mesh;
+  }
+
+  function createSocket(parent, id, cubId, pos, opts = {}) {
+    const anchor = new THREE.Object3D();
+    anchor.name = `socket:${cubId}:${id}`;
+    anchor.position.set(pos[0], pos[1], pos[2]);
+    parent.add(anchor);
+    return {
+      id,
+      cubId,
+      anchor,
+      hand: opts.hand || 'right',
+      approachOffset: opts.approachOffset || { x: 0, z: 1.36 },
+      normal: opts.normal || [0, 0, 1],
+      getWorldPosition(target = new THREE.Vector3()) {
+        anchor.updateWorldMatrix(true, false);
+        return anchor.getWorldPosition(target);
+      },
+    };
   }
 
   function setMeshColor(mesh, hex, emissiveHex = 0x000000, emissiveIntensity = 0.0) {
@@ -232,36 +252,39 @@ export function createMeshHelpers(MAT, allRegisteredMeshes) {
     }
   }
 
-  function buildPadlock3D(partKey, cubId) {
+  function buildPadlock3D(partKey, cubId, opts = {}) {
     const g = new THREE.Group();
-    const body = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.042, 0.018), MAT.padlockRed), partKey, cubId);
-    const collar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.007, 0.020), MAT.brass), partKey, cubId);
+    const meshOpts = { cloneMaterial: true, ...opts };
+    const body = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.042, 0.018), MAT.padlockRed), partKey, cubId, meshOpts);
+    const collar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.007, 0.020), MAT.brass), partKey, cubId, meshOpts);
     collar.position.y = -0.018;
     const shackle = regMesh(
       new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.0032, 10, 18, Math.PI), MAT.silverContact),
       partKey,
-      cubId
+      cubId,
+      meshOpts
     );
     shackle.position.set(0, 0.021, 0);
     g.add(body, collar, shackle);
     return g;
   }
 
-  function buildCastellKey3D(partKey, cubId) {
+  function buildCastellKey3D(partKey, cubId, opts = {}) {
     const g = new THREE.Group();
-    const esc = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.008, 16), MAT.steelTrim), partKey, cubId);
+    const meshOpts = { cloneMaterial: true, ...opts };
+    const esc = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.008, 16), MAT.steelTrim), partKey, cubId, meshOpts);
     esc.rotation.x = Math.PI / 2;
-    const cyl = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.018, 14), MAT.silverContact), partKey, cubId);
+    const cyl = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.018, 14), MAT.silverContact), partKey, cubId, meshOpts);
     cyl.rotation.x = Math.PI / 2;
     cyl.position.z = 0.005;
 
     const bowGroup = new THREE.Group();
-    const stem = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.024, 10), MAT.brass), partKey, cubId);
+    const stem = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.024, 10), MAT.brass), partKey, cubId, meshOpts);
     stem.rotation.x = Math.PI / 2;
     stem.position.z = 0.018;
-    const bit = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.003, 0.008), MAT.brass), partKey, cubId);
+    const bit = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.003, 0.008), MAT.brass), partKey, cubId, meshOpts);
     bit.position.set(0.005, 0, 0.014);
-    const bow = regMesh(new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.0032, 10, 18), MAT.brass), partKey, cubId);
+    const bow = regMesh(new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.0032, 10, 18), MAT.brass), partKey, cubId, meshOpts);
     bow.position.z = 0.032;
     bowGroup.add(stem, bit, bow);
     g.add(esc, cyl, bowGroup);
@@ -518,6 +541,7 @@ export function createMeshHelpers(MAT, allRegisteredMeshes) {
 
   return {
     regMesh,
+    createSocket,
     setMeshColor,
     buildPadlock3D,
     buildCastellKey3D,
