@@ -499,6 +499,58 @@ function makeVcbFasciaTexture() {
   return tex;
 }
 
+export function makePhasePlacardTexture(label, accentHex, bgHex = '#f7f6f3') {
+  const { ctx, tex } = makeCanvasTex(128, 64);
+  ctx.fillStyle = bgHex;
+  ctx.fillRect(0, 0, 128, 64);
+  ctx.fillStyle = accentHex;
+  ctx.fillRect(0, 0, 18, 64);
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, 125, 61);
+  ctx.fillStyle = '#111827';
+  ctx.font = 'bold 34px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, 74, 34);
+  ctx.textAlign = 'left';
+  return tex;
+}
+
+function makeEk6RailTexture() {
+  const { ctx, tex } = makeCanvasTex(512, 64);
+  ctx.fillStyle = '#242d36';
+  ctx.fillRect(0, 0, 512, 64);
+  ctx.strokeStyle = '#64748b';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, 508, 60);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = 'bold 20px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('EK6 INTEGRAL EARTH SWITCH · INTERLOCKED', 256, 34);
+  ctx.textAlign = 'left';
+  return tex;
+}
+
+function makeButtonCapTexture(symbol, fillHex) {
+  const { ctx, tex } = makeCanvasTex(128, 128);
+  ctx.fillStyle = fillHex;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(64, 64, 52, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 68px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(symbol, 64, 68);
+  ctx.textAlign = 'left';
+  return tex;
+}
+
 export function createSharedTextures() {
   return {
     ammeter: makeMeterDialTexture('A', '300'),
@@ -520,5 +572,12 @@ export function createSharedTextures() {
     tagSft: makeBadgeTexture('HV TEST', 'SANCTION FOR TEST', '#efeaf5', '#6c5492', '#6c5492'),
     shutterRed: makeBadgeTexture('DANGER 6.6 kV', 'LIVE BUSBAR SPOUTS', '#ad4337', '#ffffff', '#f5edda'),
     shutterYel: makeBadgeTexture('FEEDER SPOUTS', 'CABLE CIRCUIT', '#d4a024', '#1f2529', '#1f2529'),
+    phaseL1: makePhasePlacardTexture('L1', '#a4562a'),
+    phaseL2: makePhasePlacardTexture('L2', '#374151'),
+    phaseL3: makePhasePlacardTexture('L3', '#2d5d8c'),
+    phasePE: makePhasePlacardTexture('PE', '#2f7450'),
+    ek6RailPlate: makeEk6RailTexture(),
+    btnOpenCap: makeButtonCapTexture('O', '#2f7450'),
+    btnCloseCap: makeButtonCapTexture('I', '#ad4337'),
   };
 }

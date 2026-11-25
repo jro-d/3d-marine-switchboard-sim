@@ -10,6 +10,7 @@ import {
 } from './navigation.js';
 import { createSwitchroom } from './room.js';
 import { createEngineerCharacter } from './character.js';
+import { createInteractionManager } from './interaction.js';
 
 const TOOL_LABELS = {
   none: 'Hands free',
@@ -65,6 +66,8 @@ export function initSwitchroomGame(bridge) {
     renderer,
     stageWrap,
     switchboardMeshes = [],
+    interactiveMeshes = [],
+    getControlSocket = null,
     getSim,
     getTopology,
     getLotoSteps,
@@ -119,6 +122,13 @@ export function initSwitchroomGame(bridge) {
     },
     elapsed: 0,
     lastHudKey: '',
+    pointer: {
+      x: 0,
+      y: 0,
+      ndcX: 0,
+      ndcY: 0,
+      inside: false,
+    },
   };
 
   character.root.position.set(game.player.x, 0, game.player.z);
@@ -206,6 +216,18 @@ export function initSwitchroomGame(bridge) {
   const btnCamThird = hud.querySelector('#btnCamThird');
   const btnCamFirst = hud.querySelector('#btnCamFirst');
 
+  const interaction = createInteractionManager({
+    camera,
+    domEl: renderer.domElement,
+    hudRoot: hud,
+    interactiveMeshes,
+    getSim,
+    getTopology,
+    getCameraMode: () => game.cameraMode,
+    getPlayerPos: () => game.player,
+    isBusy: () => Boolean(game.activeAnim) || game.drag.moved,
+  });
+
   function setCameraMode(mode) {
     game.cameraMode = mode === 'first' ? 'first' : 'third';
     const isFirst = game.cameraMode === 'first';
@@ -218,7 +240,7 @@ export function initSwitchroomGame(bridge) {
     document.body.dataset.cameraMode = game.cameraMode;
     if (isFirst) {
       game.camYaw = game.player.yaw;
-      game.camPitch = 0.04;
+      game.camPitch = 0.28;
     } else {
       game.camPitch = 0.24;
     }
@@ -370,6 +392,10 @@ export function initSwitchroomGame(bridge) {
         break;
       case 'probePhase':
         sim.activeTool = 'HV_TESTER';
+        simActions.interactTerminal(action.arg.cubId, action.arg.phase);
+        break;
+      case 'cmeTerminal':
+        sim.activeTool = 'PORTABLE_EARTH';
         simActions.interactTerminal(action.arg.cubId, action.arg.phase);
         break;
       case 'applyCme':
@@ -577,7 +603,12 @@ export function initSwitchroomGame(bridge) {
       e.preventDefault();
       btnToggleDock.click();
     } else if (k === 'e') {
-      if (game.nearbyStation && currentStationActions.length > 0) {
+      const aimed = game.cameraMode === 'first' ? interaction.getHoveredInteraction() : null;
+      if (aimed?.resolution?.action) {
+        e.preventDefault();
+        const baySt = getStationById(`bay:${aimed.meta.cubId}`) || game.nearbyStation;
+        startAnimatedAction(aimed.resolution.action, baySt);
+      } else if (game.nearbyStation && currentStationActions.length > 0) {
         e.preventDefault();
         const primary = currentStationActions.find((a) => a.primary) || currentStationActions[0];
         startAnimatedAction(primary, game.nearbyStation);
@@ -615,6 +646,20 @@ export function initSwitchroomGame(bridge) {
 
   const domEl = renderer.domElement;
 
+  domEl.addEventListener('pointermove', (e) => {
+    const rect = domEl.getBoundingClientRect();
+    game.pointer.x = e.clientX;
+    game.pointer.y = e.clientY;
+    game.pointer.ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    game.pointer.ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    game.pointer.inside = true;
+  });
+
+  domEl.addEventListener('pointerleave', () => {
+    game.pointer.inside = false;
+    interaction.clearHover();
+  });
+
   domEl.addEventListener('pointerdown', (e) => {
     game.drag.active = true;
     game.drag.moved = false;
@@ -637,8 +682,8 @@ export function initSwitchroomGame(bridge) {
 
     if (game.drag.moved) {
       game.camYaw = normalizeAngle(game.camYaw - dx * 0.0065);
-      const minPitch = game.cameraMode === 'first' ? -0.45 : 0.05;
-      const maxPitch = game.cameraMode === 'first' ? 0.55 : 0.78;
+      const minPitch = game.cameraMode === 'first' ? -0.75 : 0.05;
+      const maxPitch = game.cameraMode === 'first' ? 1.15 : 0.78;
       game.camPitch = THREE.MathUtils.clamp(game.camPitch + dy * 0.005, minPitch, maxPitch);
       if (game.cameraMode === 'first') {
         game.player.yaw = game.camYaw;
@@ -654,31 +699,17 @@ export function initSwitchroomGame(bridge) {
     const rect = domEl.getBoundingClientRect();
     _ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     _ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    _raycaster.setFromCamera(_ndc, camera);
 
-    // If standing at an open HV bay, check direct clicks on L1/L2/L3/PE terminal meshes first
-    if (game.nearbyStation?.kind === 'bay' && switchboardMeshes.length > 0) {
-      const sim = getSim();
-      const nearCub = sim.cubicles[game.nearbyStation.cubId];
-      if (nearCub && nearCub.doorOpen) {
-        const meshHits = _raycaster.intersectObjects(switchboardMeshes, false);
-        const termHit = meshHits.find((h) => h.object.userData.terminalId && h.object.userData.cubId === nearCub.id);
-        if (termHit) {
-          const term = termHit.object.userData.terminalId;
-          const act = currentStationActions.find((a) => a.id === `probe_${term}`) || {
-            id: `probe_${term}`,
-            label: `Probe ${term} Terminal`,
-            anim: 'probe_wand',
-            tool: 'proving_wand',
-            duration: 0.85,
-            exec: 'probePhase',
-            arg: { cubId: nearCub.id, phase: term },
-          };
-          startAnimatedAction(act, game.nearbyStation);
-          return;
-        }
-      }
+    const picked =
+      interaction.pickAtNdc(_ndc.x, _ndc.y, 2.8) ||
+      (game.cameraMode === 'first' ? interaction.pickAtNdc(0, 0, 2.8) : null);
+    if (picked?.resolution?.action) {
+      const baySt = getStationById(`bay:${picked.meta.cubId}`) || game.nearbyStation;
+      startAnimatedAction(picked.resolution.action, baySt);
+      return;
     }
+
+    _raycaster.setFromCamera(_ndc, camera);
 
     const hits = _raycaster.intersectObjects(room.clickProxies, false);
     if (hits.length === 0) return;
@@ -795,6 +826,7 @@ export function initSwitchroomGame(bridge) {
       camera.lookAt(_camCurLook);
     }
 
+    interaction.updateHover(game.pointer);
     refreshHud(false);
   }
 
@@ -814,6 +846,21 @@ export function initSwitchroomGame(bridge) {
   window.__HV_GAME__ = {
     setCameraMode,
     walkToStation,
+    getControlSocket: (cubId, id) => {
+      const sock = getControlSocket ? getControlSocket(cubId, id) : null;
+      if (!sock) return null;
+      const wp = sock.getWorldPosition();
+      return {
+        id: sock.id,
+        cubId: sock.cubId,
+        worldPosition: { x: Number(wp.x.toFixed(3)), y: Number(wp.y.toFixed(3)), z: Number(wp.z.toFixed(3)) },
+        approachOffset: sock.approachOffset,
+      };
+    },
+    getHoveredInteraction: () => {
+      const h = interaction.getHoveredInteraction();
+      return h ? { meta: h.meta, title: h.resolution.title, actionLabel: h.resolution.actionLabel } : null;
+    },
     getState: () => ({
       cameraMode: game.cameraMode,
       player: { x: Number(game.player.x.toFixed(2)), z: Number(game.player.z.toFixed(2)), yaw: Number(game.player.yaw.toFixed(2)) },

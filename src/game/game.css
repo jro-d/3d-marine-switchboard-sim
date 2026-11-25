@@ -337,10 +337,75 @@
   border: 1.5px solid rgba(31, 111, 120, 0.85);
   background: rgba(255, 255, 255, 0.7);
   pointer-events: none;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.game-fp-reticle.targeted {
+  transform: scale(2.1);
+  border-color: #1f6f78;
+  background: rgba(31, 111, 120, 0.28);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
 .game-fp-reticle[hidden] {
   display: none;
+}
+
+.game-hover-tooltip {
+  position: absolute;
+  z-index: 26;
+  pointer-events: none;
+  min-width: 210px;
+  max-width: 280px;
+  padding: 8px 11px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: rgba(249, 250, 251, 0.97);
+  color: var(--text);
+  box-shadow: var(--shadow-2);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.game-hover-tooltip.fp-centered {
+  transform: translateX(-50%);
+}
+
+.game-hover-tooltip[hidden] {
+  display: none;
+}
+
+[data-theme="night"] .game-hover-tooltip {
+  background: rgba(22, 28, 35, 0.97);
+}
+
+.game-hover-tooltip .tt-title {
+  font: 650 12.5px/1.25 var(--font-sans);
+  color: var(--text);
+}
+
+.game-hover-tooltip .tt-sub {
+  font: 500 11.5px/1.25 var(--font-mono);
+  color: var(--text-2);
+}
+
+.game-hover-tooltip .tt-sub.tt-tone-safe {
+  color: var(--safe);
+}
+
+.game-hover-tooltip .tt-sub.tt-tone-warn {
+  color: var(--live-ink, #ad4337);
+}
+
+.game-hover-tooltip .tt-sub.tt-tone-accent {
+  color: var(--accent-ink);
+}
+
+.game-hover-tooltip .tt-action {
+  margin-top: 2px;
+  font: 600 11.5px/1.25 var(--font-sans);
+  color: var(--accent-ink);
 }
 
 @media (max-width: 900px) {
@@ -348,7 +413,7 @@
     bottom: 120px;
   }
   .game-objective-card {
-    width: calc(100vw - 24px);
+    width: calc(100% - 24px);
     left: 12px;
     top: 10px;
   }

@@ -86,6 +86,15 @@ export function buildSwitchboard(scene, renderer) {
   root.add(lvBm.root);
   bayModels['ACB-TR1-LV'] = lvBm;
 
+  const interactiveMeshes = allRegisteredMeshes.filter(
+    (m) => m.userData && (m.userData.controlId || m.userData.terminalId)
+  );
+
+  function getControlSocket(cubId, socketId) {
+    const bm = bayModels[cubId];
+    return bm?.sockets?.[socketId] || null;
+  }
+
   // 3D Telescopic 6.6 kV Proving Wand
   const wand3D = new THREE.Group();
   const wandGrip = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.020, 0.28, 14), MAT.darkConsole);
@@ -362,6 +371,9 @@ export function buildSwitchboard(scene, renderer) {
       const targetDoor = cub.doorOpen ? -1.85 : 0.0;
       bm.anim.doorAngle += (targetDoor - bm.anim.doorAngle) * 0.14;
       bm.doorHingeGroup.rotation.y = bm.anim.doorAngle;
+      if (bm.lowerDoorHingeGroup) {
+        bm.lowerDoorHingeGroup.rotation.y = bm.anim.doorAngle * 0.94;
+      }
 
       const targetStroke = cub.vcbClosed ? 1.0 : 0.0;
       bm.anim.contactStroke += (targetStroke - bm.anim.contactStroke) * 0.22;
@@ -451,6 +463,20 @@ export function buildSwitchboard(scene, renderer) {
       bm.cmeMeshes.pe.visible = Boolean(cub.cme && cub.cme.pe);
       ['L1', 'L2', 'L3'].forEach((p) => {
         bm.cmeMeshes[p].visible = Boolean(cub.cme && cub.cme[p]);
+        const ring = bm.terminalStatusRings?.[p];
+        if (ring) {
+          const testedDead = Boolean(
+            sim.ptp.completedCubicles[id] || (sim.selectedCubicle === id && sim.ptp.phasesTested[p])
+          );
+          const cmeClamped = Boolean(cub.cme && cub.cme[p]);
+          if (cmeClamped) {
+            setMeshColor(ring, 0xdba328, 0xdba328, 0.75);
+          } else if (testedDead) {
+            setMeshColor(ring, 0x2f7450, 0x2f7450, 0.85);
+          } else {
+            setMeshColor(ring, 0x3b4550, 0x000000, 0.0);
+          }
+        }
       });
 
       if (bm.meggerLeadsGroup) {
@@ -523,6 +549,8 @@ export function buildSwitchboard(scene, renderer) {
     root,
     bayModels,
     allRegisteredMeshes,
+    interactiveMeshes,
+    getControlSocket,
     syncSwitchboard,
     triggerArcFlash,
     triggerInterlockPulse,
