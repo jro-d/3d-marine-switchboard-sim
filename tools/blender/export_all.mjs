@@ -93,7 +93,7 @@ function run() {
   for (const job of activeJobs) {
     const start = Date.now();
     console.log(`[blender:build] Running "${job.id}" (${path.relative(REPO_ROOT, job.script)})...`);
-    const res = spawnSync(blenderBin, ['-b', '--factory-startup', '-P', job.script], {
+    const res = spawnSync(blenderBin, ['-b', '--factory-startup', '--python-exit-code', '1', '-P', job.script], {
       cwd: REPO_ROOT,
       stdio: 'inherit',
     });

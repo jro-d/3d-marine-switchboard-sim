@@ -17,6 +17,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENGINEER_GLB = path.resolve(__dirname, '../../public/models/engineer.glb');
 
 function parseGlbAsync(loader, arrayBuffer) {
+  if (typeof globalThis.self === 'undefined') globalThis.self = globalThis;
+  if (typeof globalThis.createImageBitmap === 'undefined') {
+    globalThis.createImageBitmap = async () => ({ width: 1, height: 1, close() {} });
+  }
   return new Promise((resolve, reject) => {
     loader.parse(arrayBuffer, '', resolve, reject);
   });

@@ -83,7 +83,8 @@ def make_principled_material(
     mat = bpy.data.materials.get(name)
     if mat is None:
         mat = bpy.data.materials.new(name=name)
-    mat.use_nodes = True
+    if mat.node_tree is None:
+        mat.use_nodes = True
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
     nodes.clear()
