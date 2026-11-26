@@ -15,6 +15,24 @@ const EXPECTED_GLBS = [
   'workbench-tools.glb',
 ];
 
+const EXPECTED_DRACO_ROOM_GLBS = [
+  { file: 'ppe-locker.glb', requiredNodes: ['PpeLockerSuit', 'PpeLockerGloves', 'PpeLockerBoots'] },
+  { file: 'permit-desk.glb', requiredNodes: ['PermitDeskAssembly'] },
+  { file: 'test-bench.glb', requiredNodes: ['TestBenchAssembly'] },
+  { file: 'key-board.glb', requiredNodes: ['KeyBoardAssembly'] },
+  { file: 'vcb-workbench.glb', requiredNodes: ['VcbWorkbenchAssembly'] },
+  { file: 'room-architecture.glb', requiredNodes: ['RoomArchitectureDetails'] },
+];
+
+function readGlbJson(buf) {
+  assert.equal(buf.readUInt32LE(0), 0x46546c67, 'Expected glTF magic header');
+  assert.equal(buf.readUInt32LE(4), 2, 'Expected glTF 2.0');
+  const jsonLen = buf.readUInt32LE(12);
+  const chunkType = buf.readUInt32LE(16);
+  assert.equal(chunkType, 0x4e4f534a, 'First GLB chunk must be JSON');
+  return JSON.parse(buf.subarray(20, 20 + jsonLen).toString('utf8'));
+}
+
 function parseGlbAsync(loader, arrayBuffer) {
   if (typeof globalThis.self === 'undefined') globalThis.self = globalThis;
   if (typeof globalThis.createImageBitmap === 'undefined') {
@@ -121,4 +139,41 @@ test('rigged engineer.glb parses into high-poly multi-bone SkinnedMesh with huma
 
   const clipNames = (gltf.animations || []).map((a) => a.name);
   assert.deepEqual(clipNames, ['Idle', 'Walk', 'Sprint', 'PushTrolley']);
+});
+
+test('all 6 high-poly Blender Draco room station and architecture GLBs are valid glTF 2.0 with PBR materials and >= 40k tris total', () => {
+  let grandTris = 0;
+
+  for (const spec of EXPECTED_DRACO_ROOM_GLBS) {
+    const fullPath = path.join(MODELS_DIR, spec.file);
+    assert.equal(fs.existsSync(fullPath), true, `Missing ${spec.file} in public/models/`);
+    const buf = fs.readFileSync(fullPath);
+    assert.ok(buf.length > 20_000, `${spec.file} should be a non-trivial Draco GLB (got ${buf.length} bytes)`);
+
+    const json = readGlbJson(buf);
+    assert.equal(
+      (json.extensionsUsed || []).includes('KHR_draco_mesh_compression'),
+      true,
+      `${spec.file} should use KHR_draco_mesh_compression`
+    );
+    assert.ok((json.materials || []).length >= 5, `${spec.file} should contain multiple PBR materials`);
+
+    const nodeNames = (json.nodes || []).map((n) => n.name);
+    for (const reqNode of spec.requiredNodes) {
+      assert.equal(nodeNames.includes(reqNode), true, `Expected node ${reqNode} in ${spec.file}`);
+    }
+
+    let assetTris = 0;
+    for (const mesh of json.meshes || []) {
+      for (const prim of mesh.primitives || []) {
+        if (typeof prim.indices === 'number') {
+          assetTris += (json.accessors[prim.indices]?.count || 0) / 3;
+        }
+      }
+    }
+    assert.ok(assetTris >= 3000, `Expected high-poly mesh >= 3,000 tris in ${spec.file} (got ${assetTris})`);
+    grandTris += assetTris;
+  }
+
+  assert.ok(grandTris >= 40000, `Expected >= 40,000 total room station + architecture tris (got ${grandTris})`);
 });
