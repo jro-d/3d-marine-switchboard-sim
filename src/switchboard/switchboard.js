@@ -3,6 +3,11 @@ import { createSwitchboardMaterials, createMeshHelpers } from './materials.js';
 import { createSharedTextures, MIMIC_KINDS } from './textures.js';
 import { buildHVBay } from './hv-bay.js';
 import { buildLVBay } from './lv-bay.js';
+import {
+  createVcbTrolleyVisual,
+  findAlignableBay,
+  TROLLEY_ALIGN_Z,
+} from './trolley.js';
 import { bayMetering, rackPos } from '../sim/state.js';
 
 export const BAY_X = {
@@ -85,6 +90,9 @@ export function buildSwitchboard(scene, renderer) {
   });
   root.add(lvBm.root);
   bayModels['ACB-TR1-LV'] = lvBm;
+
+  const trolleyVisual = createVcbTrolleyVisual(MAT);
+  root.add(trolleyVisual.root);
 
   const interactiveMeshes = allRegisteredMeshes.filter(
     (m) => m.userData && (m.userData.controlId || m.userData.terminalId)
@@ -360,6 +368,9 @@ export function buildSwitchboard(scene, renderer) {
       baySelectRing.position.x += (selBm.root.position.x - baySelectRing.position.x) * 0.20;
     }
 
+    const alignCandidate = sim.trolley?.state === 'PUSHING' ? findAlignableBay(sim.trolley, sim) : null;
+    trolleyVisual.syncVisual(sim.trolley, alignCandidate, dt);
+
     ['DG1', 'BT1', 'BT-M1', 'TR1-HV'].forEach((id) => {
       const cub = sim.cubicles[id];
       const bm = bayModels[id];
@@ -367,6 +378,21 @@ export function buildSwitchboard(scene, renderer) {
 
       const targetRackZ = ((20 - cub.rackingTurns) / 20) * RACK_STROKE;
       bm.anim.racking += (targetRackZ - bm.anim.racking) * 0.15;
+
+      const isCarried = sim.trolley?.carriedCubId === id;
+      const isLatchedHere = sim.trolley?.latchedBayId === id;
+      const targetExtract = cub.vcbExtracted ? 1 : 0;
+
+      if (isCarried && !isLatchedHere) {
+        bm.anim.extractSlide = 1;
+      } else {
+        const slideRate = Math.min(1, dt * 2.2);
+        if (Math.abs(targetExtract - bm.anim.extractSlide) < 0.015) {
+          bm.anim.extractSlide = targetExtract;
+        } else {
+          bm.anim.extractSlide += Math.sign(targetExtract - bm.anim.extractSlide) * Math.min(Math.abs(targetExtract - bm.anim.extractSlide), slideRate);
+        }
+      }
 
       const targetDoor = cub.doorOpen ? -1.85 : 0.0;
       bm.anim.doorAngle += (targetDoor - bm.anim.doorAngle) * 0.14;
@@ -381,13 +407,31 @@ export function buildSwitchboard(scene, renderer) {
       bm.movingVacuumStems.forEach((st) => { st.position.y = 1.021 - strokeOff; });
       bm.movingBellows.forEach((bel) => { bel.scale.y = 1.0 - (1.0 - bm.anim.contactStroke) * 0.24; });
 
-      bm.subGroups.TC.position.z = bm.anim.racking;
+      // Reparent VCB cassette between bay mount and trolley bed seamlessly
+      const mountOnTrolley = isCarried && (!isLatchedHere || bm.anim.extractSlide >= 0.985);
+      if (mountOnTrolley) {
+        if (bm.cassetteRoot.parent !== trolleyVisual.bedAnchor) {
+          trolleyVisual.bedAnchor.add(bm.cassetteRoot);
+        }
+        bm.cassetteRoot.position.set(0, 0, 0);
+        bm.cassetteRoot.rotation.set(0, 0, 0);
+      } else {
+        if (bm.cassetteRoot.parent !== bm.cassetteBayMount) {
+          bm.cassetteBayMount.add(bm.cassetteRoot);
+        }
+        const extraSlide = bm.anim.extractSlide * (TROLLEY_ALIGN_Z - 0.15 - RACK_STROKE);
+        bm.cassetteRoot.position.set(0, 0, bm.anim.racking + extraSlide);
+        bm.cassetteRoot.rotation.set(0, 0, 0);
+      }
 
-      const wRot = bm.anim.racking / 0.030;
+      const totalTravelZ = bm.anim.racking + bm.anim.extractSlide * (TROLLEY_ALIGN_Z - 0.15 - RACK_STROKE);
+      const wRot = totalTravelZ / 0.030;
       bm.wheelGroups.forEach((wg) => { wg.rotation.x = wRot; });
       bm.leadScrew.rotation.z = (bm.anim.racking / RACK_STROKE) * 20 * Math.PI * 2;
 
-      const openRatio = THREE.MathUtils.clamp((RACK_STROKE - bm.anim.racking) / (RACK_STROKE - SHUTTER_CLEAR_Z), 0.0, 1.0);
+      const openRatio = cub.vcbExtracted
+        ? 0.0
+        : THREE.MathUtils.clamp((RACK_STROKE - bm.anim.racking) / (RACK_STROKE - SHUTTER_CLEAR_Z), 0.0, 1.0);
       bm.shutterUpper.position.y = 1.20 + openRatio * 0.125;
       bm.shutterLower.position.y = 0.82 - openRatio * 0.125;
       bm.redShutterPadlock3D.visible = Boolean(cub.topShutterPadlocked);
@@ -551,6 +595,8 @@ export function buildSwitchboard(scene, renderer) {
     allRegisteredMeshes,
     interactiveMeshes,
     getControlSocket,
+    trolleyVisual,
+    trolleyHitMesh: trolleyVisual.hitMesh,
     syncSwitchboard,
     triggerArcFlash,
     triggerInterlockPulse,

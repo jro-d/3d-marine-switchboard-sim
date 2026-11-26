@@ -75,3 +75,21 @@ test('resolveControlInteraction handles TR1-HV dual Castell keys, racking port, 
   assert.equal(lvTrip.action.exec, 'tripVcb');
   assert.equal(lvTrip.action.arg, 'ACB-TR1-LV');
 });
+
+test('isControlAccessible disables breaker-mounted controls when VCB cassette is withdrawn onto trolley', () => {
+  const sim = createSimState();
+  const bt = sim.cubicles['BT-M1'];
+  bt.doorOpen = true;
+  bt.vcbExtracted = true;
+
+  assert.equal(isControlAccessible({ cubId: 'BT-M1', controlId: 'tripBtn' }, sim), false);
+  assert.equal(isControlAccessible({ cubId: 'BT-M1', controlId: 'closeBtn' }, sim), false);
+  assert.equal(isControlAccessible({ cubId: 'BT-M1', controlId: 'rackPort' }, sim), false);
+  assert.equal(isControlAccessible({ cubId: 'BT-M1', controlId: 'rackingPadlock' }, sim), false);
+  assert.equal(isControlAccessible({ cubId: 'BT-M1', controlId: 'castellVcb' }, sim), false);
+
+  // Stationary bay controls & terminals remain accessible
+  assert.equal(isControlAccessible({ cubId: 'BT-M1', controlId: 'ek6Socket' }, sim), true);
+  assert.equal(isControlAccessible({ cubId: 'BT-M1', controlId: 'shutterPadlock' }, sim), true);
+  assert.equal(isControlAccessible({ cubId: 'BT-M1', terminalId: 'L1' }, sim), true);
+});

@@ -1,8 +1,14 @@
 /**
  * Pure spatial navigation, collision resolution, station registry,
  * and mission guidance logic for the Marine HV 6.6 kV Switchroom Game.
- * Zero Three.js or DOM dependencies so all rules are unit-testable in Node.
  */
+import {
+  MAINTENANCE_ZONE_POS,
+  TROLLEY_ALIGN_Z,
+  TROLLEY_PUSH_OFFSET,
+  findAlignableBay,
+  isInMaintenanceZone,
+} from '../switchboard/trolley.js';
 
 export const ROOM_BOUNDS = {
   minX: -3.95,
@@ -142,6 +148,17 @@ export const STATIONS = [
     faceYaw: Math.PI / 2,
     radius: 1.35,
   },
+  {
+    id: 'station:vcb-bench',
+    kind: 'room',
+    code: 'MAINT',
+    label: 'VCB Maintenance Bay · Port-Forward',
+    shortLabel: 'VCB Maint',
+    anchor: { x: -2.25, z: 1.95 },
+    lookAt: { x: MAINTENANCE_ZONE_POS.x, z: MAINTENANCE_ZONE_POS.z },
+    faceYaw: -Math.PI * 0.72,
+    radius: 1.25,
+  },
 ];
 
 export function getStationById(id) {
@@ -162,14 +179,17 @@ export function dampAngle(current, target, lambda, dt) {
 }
 
 /**
- * Clamp and slide a circle (x, z, radius) against room bounds and static AABB obstacles.
+ * Clamp and slide a circle (x, z, radius) against room bounds, static AABB obstacles,
+ * and any dynamic obstacles (e.g. parked VCB service trolley).
  */
-export function resolveCollision(x, z, radius = PLAYER_RADIUS) {
+export function resolveCollision(x, z, radius = PLAYER_RADIUS, extraObstacles = []) {
   let rx = Math.max(ROOM_BOUNDS.minX + radius, Math.min(ROOM_BOUNDS.maxX - radius, x));
   let rz = Math.max(ROOM_BOUNDS.minZ + radius, Math.min(ROOM_BOUNDS.maxZ - radius, z));
+  const obstacles = extraObstacles && extraObstacles.length > 0 ? [...OBSTACLES, ...extraObstacles] : OBSTACLES;
 
   for (let pass = 0; pass < 2; pass++) {
-    for (const box of OBSTACLES) {
+    for (const box of obstacles) {
+      if (!box) continue;
       const nearestX = Math.max(box.minX, Math.min(box.maxX, rx));
       const nearestZ = Math.max(box.minZ, Math.min(box.maxZ, rz));
       const dx = rx - nearestX;
@@ -206,7 +226,7 @@ export function resolveCollision(x, z, radius = PLAYER_RADIUS) {
  * Step player locomotion from WASD input or active click-to-walk target.
  * Camera yaw convention: yaw = 0 looks toward +Z, yaw = PI looks toward -Z.
  */
-export function stepPlayerMovement(player, input, dt) {
+export function stepPlayerMovement(player, input, dt, extraObstacles = []) {
   const clampedDt = Math.min(Math.max(dt, 0), 0.1);
   if (player.isBusy) {
     return { ...player, speed: 0, arrived: false };
@@ -262,7 +282,7 @@ export function stepPlayerMovement(player, input, dt) {
     }
   }
 
-  const resolved = resolveCollision(player.x + vx * clampedDt, player.z + vz * clampedDt, PLAYER_RADIUS);
+  const resolved = resolveCollision(player.x + vx * clampedDt, player.z + vz * clampedDt, PLAYER_RADIUS, extraObstacles);
   const actualSpeed = clampedDt > 0 ? Math.hypot(resolved.x - player.x, resolved.z - player.z) / clampedDt : 0;
   const walkCycle = actualSpeed > 0.08 ? player.walkCycle + actualSpeed * clampedDt * 3.6 : player.walkCycle;
 
@@ -278,10 +298,31 @@ export function stepPlayerMovement(player, input, dt) {
   };
 }
 
+function makeDynamicTrolleyStation(trolley) {
+  const pushing = trolley.state === 'PUSHING';
+  const loadText = trolley.carriedCubId ? ` · Carrying ${trolley.carriedCubId} VCB` : '';
+  return {
+    id: 'station:trolley',
+    kind: 'trolley',
+    code: 'TRL',
+    label: pushing ? `VCB Service Trolley (Pushing${loadText})` : `VCB Service Trolley${loadText}`,
+    shortLabel: 'VCB Trolley',
+    anchor: { x: trolley.x, z: trolley.z },
+    lookAt: { x: trolley.x, z: trolley.z },
+    faceYaw: trolley.yaw ?? Math.PI,
+    radius: 1.35,
+  };
+}
+
 /**
- * Find the closest interactive bay or room station within reach.
+ * Find the closest interactive bay, dynamic VCB trolley, or room station within reach.
  */
-export function findNearestInteractable(x, z) {
+export function findNearestInteractable(x, z, sim = null) {
+  const trolley = sim?.trolley;
+  if (trolley && trolley.state === 'PUSHING') {
+    return makeDynamicTrolleyStation(trolley);
+  }
+
   let best = null;
   let bestScore = Infinity;
 
@@ -294,6 +335,18 @@ export function findNearestInteractable(x, z) {
       best = st;
     }
   }
+
+  if (trolley && !trolley.latchedBayId) {
+    const centerDist = Math.hypot(x - trolley.x, z - trolley.z);
+    const barX = trolley.x - Math.sin(trolley.yaw ?? Math.PI) * 0.50;
+    const barZ = trolley.z - Math.cos(trolley.yaw ?? Math.PI) * 0.50;
+    const barDist = Math.hypot(x - barX, z - barZ);
+    const tDist = Math.min(centerDist, barDist);
+    if (tDist <= 1.15 && (tDist < bestScore || best?.id === 'station:vcb-bench')) {
+      return makeDynamicTrolleyStation(trolley);
+    }
+  }
+
   return best;
 }
 
@@ -332,8 +385,26 @@ export function getRecommendedTarget(sim) {
     if (!sim.keyBoxLocked) {
       return { stationId: 'station:keys', hint: 'Walk to the Key & Tool Board and lock the Safety Key Box' };
     }
-    if (!bt.doorOpen || !bt.topShutterPadlocked) {
-      return { stationId: 'bay:BT-M1', hint: 'Return to C3 (BT-M1), open VCB door & padlock red busbar shutter' };
+    if (!bt.doorOpen) {
+      return { stationId: 'bay:BT-M1', hint: 'Return to C3 (BT-M1) and open the VCB compartment door' };
+    }
+    if (!bt.vcbExtracted) {
+      if (sim.trolley?.latchedBayId === 'BT-M1') {
+        return { stationId: 'bay:BT-M1', hint: 'At C3 (BT-M1), withdraw the VCB cassette onto the latched trolley' };
+      }
+      if (sim.trolley?.state === 'PUSHING') {
+        return { stationId: 'bay:BT-M1', hint: 'Wheel the VCB Trolley in front of C3 (BT-M1) and latch guide rails' };
+      }
+      return { stationId: 'station:trolley', hint: 'Walk to the VCB Service Trolley and grab the push-bar to withdraw BT-M1' };
+    }
+    if (sim.trolley?.latchedBayId === 'BT-M1') {
+      return { stationId: 'bay:BT-M1', hint: 'Unlatch the loaded VCB Trolley from C3 and wheel it to the Maintenance Bay' };
+    }
+    if (sim.trolley?.state === 'PUSHING' && sim.trolley?.carriedCubId === 'BT-M1') {
+      return { stationId: 'station:vcb-bench', hint: 'Wheel the loaded VCB Trolley to the Port VCB Maintenance Bay & lock brakes' };
+    }
+    if (!bt.topShutterPadlocked) {
+      return { stationId: 'bay:BT-M1', hint: 'Return to C3 (BT-M1) & padlock the red live-busbar shutter' };
     }
     if (!sim.ptp.completedCubicles['BT-M1']) {
       if (sim.ptp.state === 0 || sim.ptp.state === 2) {
@@ -360,8 +431,26 @@ export function getRecommendedTarget(sim) {
     if (!sim.keyBoxLocked) {
       return { stationId: 'station:keys', hint: 'Walk to the Key & Tool Board to lock the Safety Key Box' };
     }
-    if (!tr.doorOpen || !tr.topShutterPadlocked) {
-      return { stationId: 'bay:TR1-HV', hint: 'Return to C4 (TR1-HV), open VCB door & padlock red shutter' };
+    if (!tr.doorOpen) {
+      return { stationId: 'bay:TR1-HV', hint: 'Return to C4 (TR1-HV) and open the VCB compartment door' };
+    }
+    if (!tr.vcbExtracted) {
+      if (sim.trolley?.latchedBayId === 'TR1-HV') {
+        return { stationId: 'bay:TR1-HV', hint: 'At C4 (TR1-HV), withdraw the VCB cassette onto the latched trolley' };
+      }
+      if (sim.trolley?.state === 'PUSHING') {
+        return { stationId: 'bay:TR1-HV', hint: 'Wheel the VCB Trolley in front of C4 (TR1-HV) and latch guide rails' };
+      }
+      return { stationId: 'station:trolley', hint: 'Walk to the VCB Service Trolley and wheel it to C4 (TR1-HV)' };
+    }
+    if (sim.trolley?.latchedBayId === 'TR1-HV') {
+      return { stationId: 'bay:TR1-HV', hint: 'Unlatch the loaded VCB Trolley from C4 and wheel it clear to Maintenance Bay' };
+    }
+    if (sim.trolley?.state === 'PUSHING' && sim.trolley?.carriedCubId === 'TR1-HV') {
+      return { stationId: 'station:vcb-bench', hint: 'Wheel the loaded VCB Trolley to the Port Maintenance Bay & lock brakes' };
+    }
+    if (!tr.topShutterPadlocked) {
+      return { stationId: 'bay:TR1-HV', hint: 'Return to C4 (TR1-HV) & padlock the red live-busbar shutter' };
     }
     if (!sim.ptp.completedCubicles['TR1-HV']) {
       if (sim.ptp.state === 0 || sim.ptp.state === 2) {
@@ -407,8 +496,26 @@ export function getRecommendedTarget(sim) {
   if (!cmeClean) {
     return { stationId: 'bay:BT-M1', hint: 'Walk to C3 (BT-M1) & remove CME leads (L1/L2/L3 phases first, PE earth last)' };
   }
-  if (bt.topShutterPadlocked || bt.doorOpen) {
-    return { stationId: 'bay:BT-M1', hint: 'At C3 (BT-M1), unlock red shutter & close VCB compartment door' };
+  if (bt.topShutterPadlocked) {
+    return { stationId: 'bay:BT-M1', hint: 'At C3 (BT-M1), unlock the red upper busbar shutter padlock' };
+  }
+  if (bt.vcbExtracted) {
+    if (sim.trolley?.latchedBayId === 'BT-M1') {
+      return { stationId: 'bay:BT-M1', hint: 'At C3 (BT-M1), slide the VCB cassette from the trolley back into the bay' };
+    }
+    if (sim.trolley?.state === 'PUSHING') {
+      return { stationId: 'bay:BT-M1', hint: 'Wheel the loaded VCB Trolley to C3 (BT-M1) and latch guide rails' };
+    }
+    return { stationId: 'station:trolley', hint: 'Walk to the VCB Trolley at Maintenance Bay & wheel BT-M1 VCB back to C3' };
+  }
+  if (sim.trolley?.latchedBayId === 'BT-M1') {
+    return { stationId: 'bay:BT-M1', hint: 'Unlatch the empty VCB Trolley from C3 (BT-M1) before closing the door' };
+  }
+  if (sim.trolley?.state === 'PUSHING' && bt.doorOpen) {
+    return { stationId: 'station:trolley', hint: 'Release the empty VCB Trolley brakes so you can close the C3 door' };
+  }
+  if (bt.doorOpen) {
+    return { stationId: 'bay:BT-M1', hint: 'At C3 (BT-M1), close & bolt the VCB compartment door' };
   }
   if (sim.keyBoxLocked) {
     return { stationId: 'station:keys', hint: 'Walk to the Key & Tool Board to unlock the Safety Key Box' };
@@ -630,84 +737,167 @@ export function getStationActions(stationId, sim) {
     return actions;
   }
 
+  if (stationId === 'station:trolley') {
+    const t = sim.trolley;
+    if (!t) return [];
+    const actions = [];
+    if (t.state === 'PUSHING') {
+      const align = findAlignableBay(t, sim);
+      if (align) {
+        actions.push({
+          id: 'trolley_latch',
+          label:
+            align.mode === 'withdraw'
+              ? `Latch Trolley Guide Rails to ${align.cubId} (Withdraw VCB)`
+              : `Latch Loaded Trolley to ${align.cubId} (Re-Insert VCB)`,
+          anim: 'pull_lever',
+          tool: 'none',
+          duration: 0.75,
+          primary: true,
+          exec: 'latchTrolley',
+          arg: align.cubId,
+        });
+      }
+      const inMaint = Boolean(t.carriedCubId && isInMaintenanceZone(t));
+      actions.push({
+        id: 'trolley_release',
+        label: inMaint
+          ? `Park ${t.carriedCubId} VCB at Maintenance Bay & Lock Brakes`
+          : 'Lock Trolley Foot-Brakes & Release Push-Bar',
+        anim: 'pull_lever',
+        tool: 'none',
+        duration: 0.55,
+        primary: !align,
+        exec: 'releaseTrolley',
+      });
+    } else if (t.latchedBayId) {
+      actions.push({
+        id: 'trolley_unlatch',
+        label: `Unlatch Trolley Rails from ${t.latchedBayId} & Wheel Away`,
+        anim: 'pull_lever',
+        tool: 'none',
+        duration: 0.7,
+        primary: true,
+        exec: 'unlatchTrolley',
+      });
+    } else {
+      actions.push({
+        id: 'trolley_grab',
+        label: t.carriedCubId
+          ? `Release Brakes & Push Trolley (Carrying ${t.carriedCubId} VCB)`
+          : 'Release Brakes & Grab VCB Trolley Push-Bar',
+        anim: 'pull_lever',
+        tool: 'none',
+        duration: 0.55,
+        primary: true,
+        exec: 'grabTrolley',
+      });
+    }
+    return actions;
+  }
+
+  if (stationId === 'station:vcb-bench') {
+    const t = sim.trolley;
+    if (t && !t.latchedBayId && isInMaintenanceZone(t)) {
+      return [
+        {
+          id: 'trolley_grab',
+          label: t.carriedCubId
+            ? `Release Brakes & Push Trolley (Carrying ${t.carriedCubId} VCB)`
+            : 'Release Brakes & Grab VCB Trolley Push-Bar',
+          anim: 'pull_lever',
+          tool: 'none',
+          duration: 0.55,
+          primary: true,
+          exec: 'grabTrolley',
+        },
+      ];
+    }
+    return [];
+  }
+
   const st = getStationById(stationId);
   if (!st || st.kind !== 'bay') return [];
   const cub = sim.cubicles[st.cubId];
   if (!cub) return [];
 
   const actions = [];
+  const trolley = sim.trolley;
+  const latchedHere = Boolean(trolley && trolley.latchedBayId === cub.id);
 
-  if (cub.vcbClosed) {
-    actions.push({
-      id: 'trip_vcb',
-      label: `Trip ${cub.isHV ? 'VCB' : '440 V ACB'} [O]`,
-      anim: 'push_button',
-      tool: 'none',
-      duration: 0.85,
-      primary: true,
-      exec: 'tripVcb',
-      arg: cub.id,
-    });
-  } else {
-    actions.push({
-      id: 'close_vcb',
-      label: `Close ${cub.isHV ? 'VCB' : '440 V ACB'} [I]`,
-      anim: 'push_button',
-      tool: 'none',
-      duration: 0.85,
-      exec: 'closeVcb',
-      arg: cub.id,
-    });
-  }
-
-  if (cub.isHV) {
-    if (cub.rackingTurns > 0) {
+  if (!cub.vcbExtracted) {
+    if (cub.vcbClosed) {
       actions.push({
-        id: 'rack_out',
-        label: `Crank VCB Truck Out (${cub.rackingTurns} -> ${Math.max(0, cub.rackingTurns - 10)}/20)`,
-        anim: 'rack_crank',
-        tool: 'racking_handle',
-        duration: 1.35,
-        primary: !cub.vcbClosed && cub.rackingTurns > 0,
-        exec: 'rackOut',
+        id: 'trip_vcb',
+        label: `Trip ${cub.isHV ? 'VCB' : '440 V ACB'} [O]`,
+        anim: 'push_button',
+        tool: 'none',
+        duration: 0.85,
+        primary: true,
+        exec: 'tripVcb',
+        arg: cub.id,
+      });
+    } else {
+      actions.push({
+        id: 'close_vcb',
+        label: `Close ${cub.isHV ? 'VCB' : '440 V ACB'} [I]`,
+        anim: 'push_button',
+        tool: 'none',
+        duration: 0.85,
+        exec: 'closeVcb',
         arg: cub.id,
       });
     }
-    if (cub.rackingTurns < 20) {
-      actions.push({
-        id: 'rack_in',
-        label: `Crank VCB Truck In (${cub.rackingTurns} -> ${Math.min(20, cub.rackingTurns + 10)}/20)`,
-        anim: 'rack_crank',
-        tool: 'racking_handle',
-        duration: 1.35,
-        exec: 'rackIn',
-        arg: cub.id,
-      });
+
+    if (cub.isHV) {
+      if (cub.rackingTurns > 0) {
+        actions.push({
+          id: 'rack_out',
+          label: `Crank VCB Truck Out (${cub.rackingTurns} -> ${Math.max(0, cub.rackingTurns - 10)}/20)`,
+          anim: 'rack_crank',
+          tool: 'racking_handle',
+          duration: 1.35,
+          primary: !cub.vcbClosed && cub.rackingTurns > 0,
+          exec: 'rackOut',
+          arg: cub.id,
+        });
+      }
+      if (cub.rackingTurns < 20) {
+        actions.push({
+          id: 'rack_in',
+          label: `Crank VCB Truck In (${cub.rackingTurns} -> ${Math.min(20, cub.rackingTurns + 10)}/20)`,
+          anim: 'rack_crank',
+          tool: 'racking_handle',
+          duration: 1.35,
+          exec: 'rackIn',
+          arg: cub.id,
+        });
+      }
     }
-  }
 
-  actions.push({
-    id: 'padlock_port',
-    label: cub.rackingPadlocked ? 'Remove Racking Port Padlock' : 'Apply LOTO Padlock to Racking Port',
-    anim: 'turn_key',
-    tool: 'padlock',
-    duration: 0.95,
-    exec: 'toggleRackingPadlock',
-    arg: cub.id,
-  });
-
-  if (cub.castellKeyId) {
     actions.push({
-      id: 'castell_vcb',
-      label: cub.castellLockedOut
-        ? `Return Castell Key ${cub.castellKeyId} to Breaker`
-        : `Lock Out & Extract Castell Key ${cub.castellKeyId}`,
+      id: 'padlock_port',
+      label: cub.rackingPadlocked ? 'Remove Racking Port Padlock' : 'Apply LOTO Padlock to Racking Port',
       anim: 'turn_key',
-      tool: 'castell_key',
-      duration: 1.0,
-      exec: 'toggleCastellVcb',
+      tool: 'padlock',
+      duration: 0.95,
+      exec: 'toggleRackingPadlock',
       arg: cub.id,
     });
+
+    if (cub.castellKeyId) {
+      actions.push({
+        id: 'castell_vcb',
+        label: cub.castellLockedOut
+          ? `Return Castell Key ${cub.castellKeyId} to Breaker`
+          : `Lock Out & Extract Castell Key ${cub.castellKeyId}`,
+        anim: 'turn_key',
+        tool: 'castell_key',
+        duration: 1.0,
+        exec: 'toggleCastellVcb',
+        arg: cub.id,
+      });
+    }
   }
 
   if (cub.isHV && cub.requiredEarthKeys) {
@@ -755,6 +945,44 @@ export function getStationActions(stationId, sim) {
     });
 
     if (cub.doorOpen) {
+      if (latchedHere) {
+        if (!cub.vcbExtracted && !trolley.carriedCubId) {
+          actions.unshift({
+            id: 'withdraw_vcb',
+            label: `Withdraw ${cub.id} VCB Cassette onto Latched Trolley`,
+            anim: 'pull_lever',
+            tool: 'none',
+            duration: 1.25,
+            primary: true,
+            exec: 'withdrawVcb',
+            arg: cub.id,
+          });
+        } else if (cub.vcbExtracted && trolley.carriedCubId === cub.id) {
+          actions.unshift({
+            id: 'reinsert_vcb',
+            label: `Slide ${cub.id} VCB Cassette Back into Cubicle`,
+            anim: 'pull_lever',
+            tool: 'none',
+            duration: 1.25,
+            primary: true,
+            exec: 'reinsertVcb',
+            arg: cub.id,
+          });
+        }
+        actions.push({
+          id: 'trolley_unlatch',
+          label: `Unlatch VCB Trolley from ${cub.id} & Wheel Away`,
+          anim: 'pull_lever',
+          tool: 'none',
+          duration: 0.7,
+          primary: Boolean(
+            (cub.vcbExtracted && trolley.carriedCubId === cub.id) ||
+            (!cub.vcbExtracted && !trolley.carriedCubId)
+          ),
+          exec: 'unlatchTrolley',
+        });
+      }
+
       actions.push({
         id: 'shutter_padlock',
         label: cub.topShutterPadlocked ? 'Remove Red Busbar Shutter Padlock' : 'Padlock Red Upper Busbar Shutter',
@@ -765,7 +993,7 @@ export function getStationActions(stationId, sim) {
         arg: cub.id,
       });
 
-      if (!sim.ptp.completedCubicles[cub.id]) {
+      if (cub.vcbExtracted && !sim.ptp.completedCubicles[cub.id]) {
         const phases = ['L1', 'L2', 'L3'];
         const firstUntested = phases.find((p) => !sim.ptp.phasesTested[p]);
         for (const phase of phases) {
@@ -786,7 +1014,7 @@ export function getStationActions(stationId, sim) {
 
       const cmeApplied = cub.cme.pe && cub.cme.L1 && cub.cme.L2 && cub.cme.L3;
       const cmeAny = cub.cme.pe || cub.cme.L1 || cub.cme.L2 || cub.cme.L3;
-      if (!cmeApplied && sim.missionId === 2) {
+      if (cub.vcbExtracted && !cmeApplied && sim.missionId === 2) {
         actions.push({
           id: 'cme_apply',
           label: 'Apply Portable Earth Leads (PE first, then L1/L2/L3)',

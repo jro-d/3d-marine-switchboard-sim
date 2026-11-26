@@ -1,4 +1,5 @@
 import { createCubicles, isFullPPE } from './state.js';
+import { createTrolleyState, MAINTENANCE_ZONE_POS } from '../switchboard/trolley.js';
 
 export const MISSION_TITLES = {
   1: 'Mission 01 · Bow Thruster 6.6 kV Motor Isolation & PTW',
@@ -45,9 +46,9 @@ export function getLotoSteps(sim) {
         done: bt.earthSwitchClosed && bt.earthPadlocked && sim.keyBoxLocked,
       },
       {
-        title: 'Prove Dead & Issue Permit-to-Work (PTW)',
-        desc: 'Open C3 door, padlock red busbar shutter, prove wand on Proving Bench, probe L1/L2/L3 dead, re-prove wand, and issue PTW at Permit Desk.',
-        done: sim.ptw.active && Boolean(sim.ptp.completedCubicles['BT-M1']),
+        title: 'Withdraw VCB, Prove Dead & Issue PTW',
+        desc: 'Open C3 door, latch VCB trolley & withdraw VCB cassette, padlock red busbar shutter, prove L1/L2/L3 dead, and issue PTW at Permit Desk.',
+        done: bt.vcbExtracted && sim.ptw.active && Boolean(sim.ptp.completedCubicles['BT-M1']),
       },
     ];
   }
@@ -76,9 +77,9 @@ export function getLotoSteps(sim) {
         done: tr.earthKeysInserted.includes('K-HV') && tr.earthKeysInserted.includes('K-LV') && tr.earthSwitchClosed && tr.earthPadlocked && sim.keyBoxLocked,
       },
       {
-        title: 'Prove Dead & Apply Portable Earth Leads (CME)',
-        desc: 'Open door, padlock red shutter, execute Prove–Test–Prove on L1/L2/L3, then clamp PE first followed by L1, L2, L3.',
-        done: Boolean(sim.ptp.completedCubicles['TR1-HV']) && cmeDone,
+        title: 'Withdraw VCB, Prove Dead & Apply CME',
+        desc: 'Open door, withdraw TR1-HV VCB onto trolley, padlock red shutter, Prove–Test–Prove L1/L2/L3, then clamp PE first followed by L1, L2, L3.',
+        done: tr.vcbExtracted && Boolean(sim.ptp.completedCubicles['TR1-HV']) && cmeDone,
       },
       {
         title: 'Sign & Issue Transformer Permit-to-Work',
@@ -141,9 +142,9 @@ export function getLotoSteps(sim) {
       done: cmeClean,
     },
     {
-      title: 'Unlock Shutter, Close Door & Open Earth Switch',
-      desc: 'Unlock red shutter, bolt door, unlock Key Box, open earth switch, and return K1-BT to VCB.',
-      done: !bt.topShutterPadlocked && !bt.doorOpen && !sim.keyBoxLocked && !bt.earthSwitchClosed && !bt.castellLockedOut && sim.keys['K1-BT'] === 'VCB_TRAPPED',
+      title: 'Re-Insert VCB via Trolley, Close Door & Open Earth Switch',
+      desc: 'Unlock red shutter, wheel VCB back on trolley into 0/20, unlatch trolley, bolt door, unlock Key Box, open earth switch, and return K1-BT.',
+      done: !bt.vcbExtracted && !sim.trolley?.latchedBayId && !bt.topShutterPadlocked && !bt.doorOpen && !sim.keyBoxLocked && !bt.earthSwitchClosed && !bt.castellLockedOut && sim.keys['K1-BT'] === 'VCB_TRAPPED',
     },
     {
       title: 'Rack to TEST (10/20) & Local Function Check',
@@ -203,9 +204,11 @@ export function initMission(sim, id, hooks = {}) {
     signedETO: false,
   };
 
+  sim.trolley = createTrolleyState();
+
   if (sim.missionId === 1) {
     sim.selectedCubicle = 'BT-M1';
-    onLog('Mission 01 loaded: Isolate Bow Thruster (BT-M1) and issue PTW.');
+    onLog('Mission 01 loaded: Isolate Bow Thruster (BT-M1), withdraw VCB on trolley, and issue PTW.');
   } else if (sim.missionId === 2) {
     sim.selectedCubicle = 'ACB-TR1-LV';
     onLog('Mission 02 loaded: Isolate Transformer TR1 (isolate 440 V ACB first).');
@@ -215,6 +218,7 @@ export function initMission(sim, id, hooks = {}) {
     bt.machineryRunning = false;
     bt.vcbClosed = false;
     bt.rackingTurns = 0;
+    bt.vcbExtracted = true;
     bt.rackingPadlocked = true;
     bt.castellLockedOut = true;
     bt.earthKeysInserted = ['K1-BT'];
@@ -229,13 +233,24 @@ export function initMission(sim, id, hooks = {}) {
     sim.ptw.active = true;
     sim.ptw.signedETO = true;
     sim.ptw.signedCompetent = true;
-    onLog('Mission 03 loaded: Sanction-for-Test & 5 kV Megger PI test on BT-M1.');
+    sim.trolley = createTrolleyState({
+      state: 'MAINTENANCE_PARKED',
+      x: MAINTENANCE_ZONE_POS.x,
+      z: MAINTENANCE_ZONE_POS.z,
+      yaw: MAINTENANCE_ZONE_POS.yaw,
+      brakeLocked: true,
+      latchedBayId: null,
+      carriedCubId: 'BT-M1',
+      transferProgress: 1,
+    });
+    onLog('Mission 03 loaded: BT-M1 VCB withdrawn to Maintenance Bay; run Sanction-for-Test & 5 kV Megger PI test.');
   } else if (sim.missionId === 4) {
     sim.selectedCubicle = 'BT-M1';
     const bt = sim.cubicles['BT-M1'];
     bt.machineryRunning = false;
     bt.vcbClosed = false;
     bt.rackingTurns = 0;
+    bt.vcbExtracted = true;
     bt.rackingPadlocked = true;
     bt.castellLockedOut = true;
     bt.earthKeysInserted = ['K1-BT'];
@@ -252,7 +267,17 @@ export function initMission(sim, id, hooks = {}) {
     sim.ptw.active = true;
     sim.ptw.signedETO = true;
     sim.ptw.signedCompetent = true;
-    onLog('Mission 04 loaded: Cancel PTW, remove CME leads, restore BT-M1 to SERVICE.');
+    sim.trolley = createTrolleyState({
+      state: 'MAINTENANCE_PARKED',
+      x: MAINTENANCE_ZONE_POS.x,
+      z: MAINTENANCE_ZONE_POS.z,
+      yaw: MAINTENANCE_ZONE_POS.yaw,
+      brakeLocked: true,
+      latchedBayId: null,
+      carriedCubId: 'BT-M1',
+      transferProgress: 1,
+    });
+    onLog('Mission 04 loaded: Cancel PTW, remove CME leads, re-insert BT-M1 VCB via trolley & restore to SERVICE.');
   }
 
   onRender();

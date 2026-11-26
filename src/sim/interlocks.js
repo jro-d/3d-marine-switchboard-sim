@@ -1,4 +1,12 @@
 import { getTopology, isFullPPE } from './state.js';
+import {
+  grabTrolleyState,
+  releaseTrolleyState,
+  latchTrolleyState,
+  unlatchTrolleyState,
+  extractVcbState,
+  reinsertVcbState,
+} from '../switchboard/trolley.js';
 
 /**
  * Creates all STCW switching, LOTO interlock, proving wand, Megger, and PTW/SFT
@@ -75,6 +83,10 @@ export function createSimActions(sim, hooks = {}) {
     const cub = sim.cubicles[cubId];
     if (!cub || cub.vcbClosed) return;
     if (cub.isHV) {
+      if (cub.vcbExtracted) {
+        triggerViolation(5, 'VCB Cassette Withdrawn onto Trolley', 'Re-insert the VCB cassette into DISCONNECTED (0/20) before attempting to close.');
+        return;
+      }
       if (cub.rackingTurns !== 20 && cub.rackingTurns !== 10) {
         triggerViolation(5, 'Cannot Close VCB in Mid-Travel or Disconnected Position', 'VCB must be in SERVICE (20) or TEST (10) position.');
         return;
@@ -104,6 +116,10 @@ export function createSimActions(sim, hooks = {}) {
     if (!checkPpe('Rack VCB Truck')) return;
     const cub = sim.cubicles[cubId];
     if (!cub || !cub.isHV) return;
+    if (cub.vcbExtracted) {
+      triggerViolation(5, 'VCB Cassette Withdrawn onto Trolley', 'Re-insert the VCB cassette from the trolley into DISCONNECTED (0/20) before racking.');
+      return;
+    }
     if (cub.vcbClosed) {
       triggerViolation(5, 'Live Racking Prevention Interlock Engaged', 'Attempting to rack a CLOSED 6.6 kV breaker draws a lethal open-air plasma arc across the primary tulip spouts. Trip VCB OPEN [O] first.', true);
       return;
@@ -279,6 +295,10 @@ export function createSimActions(sim, hooks = {}) {
       audio.playClunk(90);
       logEvent(`${cub.id}: Front VCB compartment door unbolted & swung open.`, 'info');
     } else {
+      if (sim.trolley?.latchedBayId === cubId) {
+        triggerViolation(5, 'VCB Trolley Latched to Cubicle Sill', 'Unlatch and wheel the VCB trolley clear before closing the compartment door.');
+        return;
+      }
       cub.doorOpen = false;
       audio.playClunk(100);
       logEvent(`${cub.id}: Front VCB compartment door closed & bolted.`, 'info');
@@ -332,6 +352,10 @@ export function createSimActions(sim, hooks = {}) {
     // Accept both canonical HV_TESTER and legacy VOLTAGE_TESTER alias defensively
     if (sim.activeTool === 'HV_TESTER' || sim.activeTool === 'VOLTAGE_TESTER') {
       sim.activeTool = 'HV_TESTER';
+      if (cub.isHV && !cub.vcbExtracted) {
+        triggerViolation(5, 'VCB Obstructing Cable Compartment', 'Withdraw the VCB cassette completely onto the VCB Service Trolley before probing L1–L3.');
+        return;
+      }
       if (term === 'PE') {
         audio.playRatchet();
         logEvent('PE hull earth busbar verified at 0.0 V ground reference.', 'info');
@@ -360,6 +384,10 @@ export function createSimActions(sim, hooks = {}) {
     }
 
     if (sim.activeTool === 'PORTABLE_EARTH') {
+      if (cub.isHV && !cub.vcbExtracted) {
+        triggerViolation(5, 'VCB Obstructing Cable Compartment', 'Withdraw the VCB cassette completely onto the VCB Service Trolley before fitting CME leads.');
+        return;
+      }
       if (volts > 0) {
         triggerViolation(5, `Arc-Flash: Applied Portable Earth to Live Terminal (${volts} V)`, 'Catastrophic short-circuit.', true);
         return;
@@ -502,6 +530,97 @@ export function createSimActions(sim, hooks = {}) {
     render();
   }
 
+  function grabTrolley() {
+    const res = grabTrolleyState(sim.trolley);
+    if (!res.ok) {
+      logEvent(res.reason, 'warn');
+      audio.playInterlockBlock();
+      return false;
+    }
+    audio.playClunk(105);
+    logEvent('VCB Service Trolley wheel brakes unlocked — pushing trolley.', 'info');
+    render();
+    return true;
+  }
+
+  function releaseTrolley() {
+    const res = releaseTrolleyState(sim.trolley);
+    if (!res.ok) return false;
+    audio.playClunk(95);
+    logEvent(
+      sim.trolley.state === 'MAINTENANCE_PARKED'
+        ? `VCB Trolley parked & braked in Port Maintenance Bay with ${sim.trolley.carriedCubId} cassette.`
+        : 'VCB Service Trolley wheel brakes locked.',
+      sim.trolley.state === 'MAINTENANCE_PARKED' ? 'safe' : 'info'
+    );
+    render();
+    return true;
+  }
+
+  function latchTrolley(cubId) {
+    if (!checkPpe('Latch VCB Trolley Rails')) return false;
+    const res = latchTrolleyState(sim.trolley, cubId, sim);
+    if (!res.ok) {
+      triggerViolation(5, 'Cannot Latch VCB Trolley', res.reason);
+      return false;
+    }
+    sim.selectedCubicle = cubId;
+    audio.playClunk(85);
+    logEvent(`${cubId}: VCB Service Trolley aligned and rail hooks latched to cubicle sill.`, 'safe');
+    render();
+    return true;
+  }
+
+  function unlatchTrolley() {
+    const prevBay = sim.trolley?.latchedBayId;
+    const res = unlatchTrolleyState(sim.trolley);
+    if (!res.ok) return false;
+    audio.playRatchet();
+    logEvent(`${prevBay || 'Bay'}: Trolley rail hooks unlatched — ready to wheel trolley clear.`, 'info');
+    render();
+    return true;
+  }
+
+  function withdrawVcbToTrolley(cubId) {
+    if (!checkPpe('Withdraw VCB Cassette')) return false;
+    if (cubId && sim.trolley && !sim.trolley.latchedBayId) {
+      const latchRes = latchTrolleyState(sim.trolley, cubId, sim);
+      if (!latchRes.ok) {
+        triggerViolation(5, 'VCB Withdrawal Blocked', latchRes.reason);
+        return false;
+      }
+    }
+    const res = extractVcbState(sim.trolley, sim);
+    if (!res.ok) {
+      triggerViolation(5, 'VCB Withdrawal Blocked', res.reason);
+      return false;
+    }
+    audio.playClunk(75);
+    logEvent(`${res.cubId}: VCB cassette completely withdrawn onto service trolley. Cable spouts & shutters are now unobstructed.`, 'safe');
+    render();
+    return true;
+  }
+
+  function reinsertVcbFromTrolley(cubId) {
+    if (!checkPpe('Re-Insert VCB Cassette')) return false;
+    if (cubId && sim.trolley && !sim.trolley.latchedBayId) {
+      const latchRes = latchTrolleyState(sim.trolley, cubId, sim);
+      if (!latchRes.ok) {
+        triggerViolation(5, 'VCB Re-Insertion Blocked', latchRes.reason);
+        return false;
+      }
+    }
+    const res = reinsertVcbState(sim.trolley, sim);
+    if (!res.ok) {
+      triggerViolation(5, 'VCB Re-Insertion Blocked', res.reason);
+      return false;
+    }
+    audio.playClunk(85);
+    logEvent(`${res.cubId}: VCB cassette rolled back into DISCONNECTED (0/20) rails.`, 'safe');
+    render();
+    return true;
+  }
+
   return {
     triggerViolation,
     checkPpe,
@@ -527,5 +646,11 @@ export function createSimActions(sim, hooks = {}) {
     cancelPTW,
     issueSFT,
     cancelSFT,
+    grabTrolley,
+    releaseTrolley,
+    latchTrolley,
+    unlatchTrolley,
+    withdrawVcbToTrolley,
+    reinsertVcbFromTrolley,
   };
 }

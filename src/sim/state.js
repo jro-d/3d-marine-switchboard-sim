@@ -2,6 +2,7 @@
  * Pure simulation state, cubicle definitions, electrical topology solver,
  * and metering calculations. Zero DOM or Three.js dependencies.
  */
+import { createTrolleyState } from '../switchboard/trolley.js';
 
 export const BAY_COLOR_VARS = {
   'DG1': 'var(--bay-c1)',
@@ -22,6 +23,7 @@ export function createCubicles() {
       isHV: true,
       vcbClosed: true,
       rackingTurns: 20,
+      vcbExtracted: false,
       rackingPadlocked: false,
       castellLockedOut: false,
       earthSwitchClosed: false,
@@ -42,6 +44,7 @@ export function createCubicles() {
       isHV: true,
       vcbClosed: true,
       rackingTurns: 20,
+      vcbExtracted: false,
       rackingPadlocked: false,
       castellLockedOut: false,
       earthSwitchClosed: false,
@@ -63,6 +66,7 @@ export function createCubicles() {
       machineryRunning: true,
       vcbClosed: true,
       rackingTurns: 20,
+      vcbExtracted: false,
       rackingPadlocked: false,
       castellKeyId: 'K1-BT',
       castellLockedOut: false,
@@ -87,6 +91,7 @@ export function createCubicles() {
       machineryRunning: false,
       vcbClosed: true,
       rackingTurns: 20,
+      vcbExtracted: false,
       rackingPadlocked: false,
       castellKeyId: 'K-HV',
       castellLockedOut: false,
@@ -178,6 +183,8 @@ export function createSimState() {
       targetCubicle: 'BT-M1',
       signedETO: false,
     },
+
+    trolley: createTrolleyState(),
 
     cubicles: createCubicles(),
   };

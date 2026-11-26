@@ -9,8 +9,8 @@
     "start": "node server.js",
     "preview": "node server.js",
     "build": "vite build",
-    "lint": "node --check server.js && node --check src/main.js && node --check src/sim/audio.js && node --check src/sim/state.js && node --check src/sim/interlocks.js && node --check src/sim/missions.js && node --check src/switchboard/materials.js && node --check src/switchboard/textures.js && node --check src/switchboard/hv-bay.js && node --check src/switchboard/lv-bay.js && node --check src/switchboard/switchboard.js && node --check src/game/navigation.js && node --check src/game/room.js && node --check src/game/character.js && node --check src/game/interaction.js && node --check src/game/controller.js && node --check src/ui/hud.js",
-    "test": "node --test server.test.mjs src/sim/sim.test.mjs src/game/navigation.test.mjs src/game/interaction.test.mjs"
+    "lint": "node --check server.js && node --check src/main.js && node --check src/sim/audio.js && node --check src/sim/state.js && node --check src/sim/interlocks.js && node --check src/sim/missions.js && node --check src/switchboard/materials.js && node --check src/switchboard/textures.js && node --check src/switchboard/vcb-cassette.js && node --check src/switchboard/trolley.js && node --check src/switchboard/hv-bay.js && node --check src/switchboard/lv-bay.js && node --check src/switchboard/switchboard.js && node --check src/game/navigation.js && node --check src/game/room.js && node --check src/game/character.js && node --check src/game/interaction.js && node --check src/game/controller.js && node --check src/ui/hud.js",
+    "test": "node --test server.test.mjs src/sim/sim.test.mjs src/switchboard/trolley.test.mjs src/game/navigation.test.mjs src/game/interaction.test.mjs"
   },
   "dependencies": {
     "express": "^4.22.3",
