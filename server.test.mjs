@@ -42,6 +42,11 @@ test('serves built index.html and bundled Vite assets with 200 OK', async () => 
       assert.equal(res.status, 200, `Expected 200 for ${urlPath}`);
     }
 
+    for (const glbName of ['watertight-door.glb', 'rescue-hook.glb', 'co2-extinguisher.glb', 'workbench-tools.glb']) {
+      const glbRes = await fetch(`${base}/models/${glbName}`);
+      assert.equal(glbRes.status, 200, `Expected 200 for /models/${glbName}`);
+    }
+
     const missingRes = await fetch(`${base}/does-not-exist-check.txt`);
     assert.equal(missingRes.status, 404);
   } finally {

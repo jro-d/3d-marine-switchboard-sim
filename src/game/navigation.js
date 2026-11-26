@@ -11,10 +11,10 @@ import {
 } from '../switchboard/trolley.js';
 
 export const ROOM_BOUNDS = {
-  minX: -3.95,
-  maxX: 3.95,
-  minZ: 0.92,
-  maxZ: 5.15,
+  minX: -4.95,
+  maxX: 4.95,
+  minZ: -2.58,
+  maxZ: 6.55,
 };
 
 export const PLAYER_RADIUS = 0.28;
@@ -32,15 +32,17 @@ export const BAY_X = {
 
 export const OBSTACLES = [
   // 5-bay 6.6 kV switchboard lineup footprint
-  { id: 'switchboard', minX: -2.30, maxX: 2.30, minZ: -0.95, maxZ: 0.78 },
+  { id: 'switchboard', minX: -2.30, maxX: 2.30, minZ: -0.72, maxZ: 0.78 },
   // Port bulkhead PPE Locker
-  { id: 'ppe-locker', minX: -4.25, maxX: -3.40, minZ: 1.75, maxZ: 3.25 },
+  { id: 'ppe-locker', minX: -5.20, maxX: -4.42, minZ: 2.20, maxZ: 3.70 },
+  // Port-forward VCB Diagnostic Workbench
+  { id: 'vcb-workbench', minX: -5.20, maxX: -4.42, minZ: -1.15, maxZ: 0.45 },
   // Port-aft Key & Tool Board bench
-  { id: 'key-bench', minX: -3.10, maxX: -1.35, minZ: 4.82, maxZ: 5.55 },
+  { id: 'key-bench', minX: -3.65, maxX: -1.90, minZ: 5.82, maxZ: 6.60 },
   // Starboard-aft Proving & Megger Test Bench
-  { id: 'test-bench', minX: 1.35, maxX: 3.10, minZ: 4.82, maxZ: 5.55 },
+  { id: 'test-bench', minX: 1.90, maxX: 3.65, minZ: 5.82, maxZ: 6.60 },
   // Starboard bulkhead Permit Desk
-  { id: 'permit-desk', minX: 3.40, maxX: 4.25, minZ: 1.75, maxZ: 3.25 },
+  { id: 'permit-desk', minX: 4.42, maxX: 5.20, minZ: 2.20, maxZ: 3.70 },
 ];
 
 export const STATIONS = [
@@ -105,13 +107,61 @@ export const STATIONS = [
     radius: 0.92,
   },
   {
+    id: 'rear:DG1',
+    kind: 'rear-bay',
+    cubId: 'DG1',
+    code: 'R-C1',
+    label: 'C1 Rear · DG1 Cable & CT Chamber',
+    shortLabel: 'Rear C1',
+    anchor: { x: BAY_X['DG1'], z: -1.28 },
+    lookAt: { x: BAY_X['DG1'], z: -0.64 },
+    faceYaw: 0,
+    radius: 0.88,
+  },
+  {
+    id: 'rear:BT1',
+    kind: 'rear-bay',
+    cubId: 'BT1',
+    code: 'R-C2',
+    label: 'C2 Rear · 6.6 kV Bus-Tie Splice Chamber (BT1)',
+    shortLabel: 'Rear C2',
+    anchor: { x: BAY_X['BT1'], z: -1.28 },
+    lookAt: { x: BAY_X['BT1'], z: -0.64 },
+    faceYaw: 0,
+    radius: 0.88,
+  },
+  {
+    id: 'rear:BT-M1',
+    kind: 'rear-bay',
+    cubId: 'BT-M1',
+    code: 'R-C3',
+    label: 'C3 Rear · Bow Thruster Feeder Termination',
+    shortLabel: 'Rear C3',
+    anchor: { x: BAY_X['BT-M1'], z: -1.28 },
+    lookAt: { x: BAY_X['BT-M1'], z: -0.64 },
+    faceYaw: 0,
+    radius: 0.88,
+  },
+  {
+    id: 'rear:TR1-HV',
+    kind: 'rear-bay',
+    cubId: 'TR1-HV',
+    code: 'R-C4',
+    label: 'C4 Rear · Transformer Primary Cable Chamber',
+    shortLabel: 'Rear C4',
+    anchor: { x: BAY_X['TR1-HV'], z: -1.28 },
+    lookAt: { x: BAY_X['TR1-HV'], z: -0.64 },
+    faceYaw: 0,
+    radius: 0.88,
+  },
+  {
     id: 'station:ppe',
     kind: 'room',
     code: 'PPE',
     label: 'HV PPE Locker · Port Bulkhead',
     shortLabel: 'PPE Locker',
-    anchor: { x: -2.92, z: 2.50 },
-    lookAt: { x: -3.85, z: 2.50 },
+    anchor: { x: -3.95, z: 2.95 },
+    lookAt: { x: -4.82, z: 2.95 },
     faceYaw: -Math.PI / 2,
     radius: 1.35,
   },
@@ -121,8 +171,8 @@ export const STATIONS = [
     code: 'KEYS',
     label: 'Key Box & Tool Board · Port-Aft',
     shortLabel: 'Key Board',
-    anchor: { x: -2.22, z: 4.30 },
-    lookAt: { x: -2.22, z: 5.10 },
+    anchor: { x: -2.78, z: 5.28 },
+    lookAt: { x: -2.78, z: 6.18 },
     faceYaw: 0,
     radius: 1.35,
   },
@@ -132,8 +182,8 @@ export const STATIONS = [
     code: 'TEST',
     label: 'Proving Unit & 5 kV Megger Bench',
     shortLabel: 'Test Bench',
-    anchor: { x: 2.22, z: 4.30 },
-    lookAt: { x: 2.22, z: 5.10 },
+    anchor: { x: 2.78, z: 5.28 },
+    lookAt: { x: 2.78, z: 6.18 },
     faceYaw: 0,
     radius: 1.35,
   },
@@ -143,8 +193,8 @@ export const STATIONS = [
     code: 'PTW',
     label: 'Permit-to-Work Desk · Starboard',
     shortLabel: 'Permit Desk',
-    anchor: { x: 2.92, z: 2.50 },
-    lookAt: { x: 3.85, z: 2.50 },
+    anchor: { x: 3.95, z: 2.95 },
+    lookAt: { x: 4.82, z: 2.95 },
     faceYaw: Math.PI / 2,
     radius: 1.35,
   },
@@ -152,12 +202,12 @@ export const STATIONS = [
     id: 'station:vcb-bench',
     kind: 'room',
     code: 'MAINT',
-    label: 'VCB Maintenance Bay · Port-Forward',
+    label: 'VCB Diagnostic Workbench & Maintenance Bay',
     shortLabel: 'VCB Maint',
-    anchor: { x: -2.25, z: 1.95 },
-    lookAt: { x: MAINTENANCE_ZONE_POS.x, z: MAINTENANCE_ZONE_POS.z },
-    faceYaw: -Math.PI * 0.72,
-    radius: 1.25,
+    anchor: { x: -3.95, z: -0.35 },
+    lookAt: { x: -4.82, z: -0.35 },
+    faceYaw: -Math.PI / 2,
+    radius: 1.35,
   },
 ];
 
@@ -222,8 +272,75 @@ export function resolveCollision(x, z, radius = PLAYER_RADIUS, extraObstacles = 
   return { x: rx, z: rz };
 }
 
+function segmentIntersectsAabb(x0, z0, x1, z1, box) {
+  let tMin = 0;
+  let tMax = 1;
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+
+  if (Math.abs(dx) < 1e-8) {
+    if (x0 < box.minX || x0 > box.maxX) return false;
+  } else {
+    let tx1 = (box.minX - x0) / dx;
+    let tx2 = (box.maxX - x0) / dx;
+    if (tx1 > tx2) [tx1, tx2] = [tx2, tx1];
+    tMin = Math.max(tMin, tx1);
+    tMax = Math.min(tMax, tx2);
+    if (tMin > tMax) return false;
+  }
+
+  if (Math.abs(dz) < 1e-8) {
+    if (z0 < box.minZ || z0 > box.maxZ) return false;
+  } else {
+    let tz1 = (box.minZ - z0) / dz;
+    let tz2 = (box.maxZ - z0) / dz;
+    if (tz1 > tz2) [tz1, tz2] = [tz2, tz1];
+    tMin = Math.max(tMin, tz1);
+    tMax = Math.min(tMax, tz2);
+    if (tMin > tMax) return false;
+  }
+
+  return true;
+}
+
 /**
- * Step player locomotion from WASD input or active click-to-walk target.
+ * Compute an obstacle-clearing waypoint list around the 5-bay switchboard
+ * via the shorter Port (x = -2.85) or Starboard (x = +2.85) corridor when
+ * walking between the front operating floor and the Rear Bus-Tie Aisle.
+ */
+export function computeWalkWaypoints(fromX, fromZ, toX, toZ, faceYaw) {
+  const paddedBoard = { minX: -2.58, maxX: 2.58, minZ: -1.02, maxZ: 1.08 };
+  const finalPt = typeof faceYaw === 'number' ? { x: toX, z: toZ, faceYaw } : { x: toX, z: toZ };
+
+  if (!segmentIntersectsAabb(fromX, fromZ, toX, toZ, paddedBoard)) {
+    return [finalPt];
+  }
+
+  const portX = -2.85;
+  const stbdX = 2.85;
+  const portCost = Math.abs(fromX - portX) + Math.abs(toX - portX);
+  const stbdCost = Math.abs(fromX - stbdX) + Math.abs(toX - stbdX);
+  const sideX = portCost <= stbdCost ? portX : stbdX;
+
+  const frontClearZ = 1.24;
+  const rearClearZ = -1.24;
+  const pts = [];
+
+  if (fromZ >= 0 && toZ < 0) {
+    pts.push({ x: sideX, z: Math.max(frontClearZ, Math.min(fromZ, 1.45)) });
+    pts.push({ x: sideX, z: rearClearZ });
+  } else if (fromZ < 0 && toZ >= 0) {
+    pts.push({ x: sideX, z: Math.min(rearClearZ, Math.max(fromZ, -1.45)) });
+    pts.push({ x: sideX, z: frontClearZ });
+  } else {
+    pts.push({ x: sideX, z: fromZ >= 0 ? frontClearZ : rearClearZ });
+  }
+  pts.push(finalPt);
+  return pts;
+}
+
+/**
+ * Step player locomotion from WASD input or active click-to-walk target / waypoint queue.
  * Camera yaw convention: yaw = 0 looks toward +Z, yaw = PI looks toward -Z.
  */
 export function stepPlayerMovement(player, input, dt, extraObstacles = []) {
@@ -240,10 +357,12 @@ export function stepPlayerMovement(player, input, dt, extraObstacles = []) {
   let vz = 0;
   let nextYaw = player.yaw;
   let targetPoint = player.targetPoint;
+  let waypoints = player.waypoints || null;
   let arrived = false;
 
   if (hasManualInput) {
     targetPoint = null;
+    waypoints = null;
     const camYaw = input.cameraYaw ?? Math.PI;
     const fwdX = Math.sin(camYaw);
     const fwdZ = Math.cos(camYaw);
@@ -268,11 +387,18 @@ export function stepPlayerMovement(player, input, dt, extraObstacles = []) {
     const dist = Math.hypot(dx, dz);
 
     if (dist <= 0.10) {
-      arrived = true;
-      if (typeof targetPoint.faceYaw === 'number') {
-        nextYaw = dampAngle(player.yaw, targetPoint.faceYaw, 14, clampedDt);
+      if (waypoints && waypoints.length > 0) {
+        const [nextPt, ...rest] = waypoints;
+        targetPoint = nextPt;
+        waypoints = rest.length > 0 ? rest : null;
+      } else {
+        arrived = true;
+        if (typeof targetPoint.faceYaw === 'number') {
+          nextYaw = dampAngle(player.yaw, targetPoint.faceYaw, 14, clampedDt);
+        }
+        targetPoint = null;
+        waypoints = null;
       }
-      targetPoint = null;
     } else {
       const speed = Math.min(WALK_SPEED * 1.12, dist / Math.max(clampedDt, 0.016));
       vx = (dx / dist) * speed;
@@ -294,6 +420,7 @@ export function stepPlayerMovement(player, input, dt, extraObstacles = []) {
     speed: actualSpeed,
     walkCycle,
     targetPoint,
+    waypoints,
     arrived,
   };
 }
@@ -817,7 +944,28 @@ export function getStationActions(stationId, sim) {
   }
 
   const st = getStationById(stationId);
-  if (!st || st.kind !== 'bay') return [];
+  if (!st) return [];
+
+  if (st.kind === 'rear-bay') {
+    const cub = sim.cubicles[st.cubId];
+    if (!cub) return [];
+    return [
+      {
+        id: 'toggle_rear_door',
+        label: cub.rearDoorOpen
+          ? `Close & Bolt ${cub.id} Rear Inspection Cover`
+          : `Unbolt & Open ${cub.id} Rear Cable / Bus-Tie Cover`,
+        anim: 'open_door',
+        tool: 'none',
+        duration: 1.0,
+        primary: true,
+        exec: 'toggleRearDoor',
+        arg: cub.id,
+      },
+    ];
+  }
+
+  if (st.kind !== 'bay') return [];
   const cub = sim.cubicles[st.cubId];
   if (!cub) return [];
 

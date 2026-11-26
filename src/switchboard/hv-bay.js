@@ -812,10 +812,102 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   subGroups.CT.add(glandPlate);
   addFasteners(subGroups.CT, 'CT', cubId, rectPoints(-0.30, 0.30, -0.36, -0.14, 0.15, 'xz', 0.034), { axis: 'y', r: 0.0042, h: 0.003 });
 
-  const rearLowerCover = regMesh(new THREE.Mesh(new THREE.BoxGeometry(W - 0.02, 1.08, 0.014), MAT.steelPanel), 'CT', cubId);
-  rearLowerCover.position.set(0, 0.62, -0.635);
-  subGroups.CT.add(znoBar, cbct, rearLowerCover);
-  addFasteners(subGroups.CT, 'CT', cubId, rectPoints(-0.36, 0.36, 0.11, 1.13, 0.17, 'xy', -0.642), { dir: -1, r: 0.0045, h: 0.0034 });
+  // Dedicated 6.6 kV Bus-Tie splice links & M16 torque-witness bolts inside C2 (BT1) rear chamber
+  if (cubId === 'BT1') {
+    [-0.19, 0.0, 0.19].forEach((px, pIdx) => {
+      const tieBar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.044, 0.016), MAT.copper), 'BB', cubId);
+      tieBar.position.set(px, 0.88 - pIdx * 0.05, -0.39);
+      const splicePlate = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.054, 0.024), MAT.copper), 'BB', cubId);
+      splicePlate.position.set(px, 0.88 - pIdx * 0.05, -0.39);
+      const witnessStripe = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.048, 0.028), MAT.shutterRed), 'BB', cubId, { castShadow: false });
+      witnessStripe.position.set(px, 0.88 - pIdx * 0.05, -0.39);
+      subGroups.BB.add(tieBar, splicePlate, witnessStripe);
+      addFasteners(
+        subGroups.BB,
+        'BB',
+        cubId,
+        [
+          [px - 0.032, 0.88 - pIdx * 0.05, -0.405],
+          [px + 0.032, 0.88 - pIdx * 0.05, -0.405],
+        ],
+        { dir: -1, hex: true, r: 0.008, h: 0.007, mat: MAT.brass }
+      );
+    });
+  }
+
+  subGroups.CT.add(znoBar, cbct);
+
+  // Hinged rear inspection cover (opens into the Rear Bus-Tie & Cable Aisle)
+  const rearDoorHingeGroup = new THREE.Group();
+  rearDoorHingeGroup.position.set(-W / 2 + 0.016, 0.62, -0.635);
+  subGroups.CT.add(rearDoorHingeGroup);
+
+  const rearW = W - 0.032;
+  const rearLowerCover = regMesh(new THREE.Mesh(new THREE.BoxGeometry(rearW, 1.08, 0.014), MAT.steelPanel), 'CT', cubId);
+  rearLowerCover.position.set(rearW * 0.5, 0, 0);
+  rearDoorHingeGroup.add(rearLowerCover);
+
+  // Rear bronze-mesh inspection window + bezel
+  const rearWinScreen = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 0.016), MAT.bronzeMesh), 'CT', cubId);
+  rearWinScreen.position.set(rearW * 0.5, 0.20, -0.002);
+  const rearWinFrame = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.26, 0.010), MAT.steelTrim), 'CT', cubId);
+  rearWinFrame.position.set(rearW * 0.5, 0.20, -0.009);
+  rearDoorHingeGroup.add(rearWinFrame, rearWinScreen);
+
+  // Rear bay identification nameplate & HV warning placard (facing -Z rear aisle)
+  const rearBadgeTex = makeBadgeTexture(
+    `${titleText} · REAR`,
+    cubId === 'BT1' ? '6.6 kV BUS-TIE SPLICE' : 'CABLE & CT CHAMBER',
+    '#f7f6f3',
+    '#1f2529',
+    `#${bayAccentHex.toString(16).padStart(6, '0')}`
+  );
+  const rearNameplate = regMesh(
+    new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.095), new THREE.MeshStandardMaterial({ map: rearBadgeTex, roughness: 0.38 })),
+    'CT',
+    cubId,
+    { castShadow: false }
+  );
+  rearNameplate.rotation.y = Math.PI;
+  rearNameplate.position.set(rearW * 0.5, 0.43, -0.010);
+
+  const rearHazard = regMesh(
+    new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.075), new THREE.MeshStandardMaterial({ map: SHARED_TEX.doorHazard, roughness: 0.4 })),
+    'CT',
+    cubId,
+    { castShadow: false }
+  );
+  rearHazard.rotation.y = Math.PI;
+  rearHazard.position.set(rearW * 0.5, -0.04, -0.010);
+  rearDoorHingeGroup.add(rearNameplate, rearHazard);
+
+  // Rear hinges & interactive espagnolette latch handle
+  [-0.42, 0.0, 0.42].forEach((hy) => {
+    const rHinge = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.048, 10), MAT.darkConsole), 'CT', cubId);
+    rHinge.position.set(0.0, hy, -0.012);
+    rearDoorHingeGroup.add(rHinge);
+  });
+
+  const rearHandleEsc = regMesh(
+    new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.17, 0.014), MAT.darkConsole),
+    'CT',
+    cubId,
+    { controlId: 'rearDoorHandle', cloneMaterial: true }
+  );
+  rearHandleEsc.position.set(rearW - 0.048, 0.04, -0.014);
+  const rearHandleLever = regMesh(
+    new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.12, 0.024), MAT.silverContact),
+    'CT',
+    cubId,
+    { controlId: 'rearDoorHandle', cloneMaterial: true }
+  );
+  rearHandleLever.position.set(rearW - 0.048, 0.02, -0.026);
+  rearDoorHingeGroup.add(rearHandleEsc, rearHandleLever);
+  addFasteners(rearDoorHingeGroup, 'CT', cubId, rectPoints(0.04, rearW - 0.04, -0.49, 0.49, 0.24, 'xy', -0.009), { dir: -1, r: 0.0045, h: 0.0034 });
+
+  sockets.rearDoorHandle = createSocket(rearDoorHingeGroup, 'rearDoorHandle', cubId, [rearW - 0.048, 0.02, -0.038], {
+    approachOffset: { x: 0.22, z: -1.28 },
+  });
 
   return {
     cubId,
@@ -829,6 +921,7 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
     arFlaps,
     doorHingeGroup,
     lowerDoorHingeGroup,
+    rearDoorHingeGroup,
     terminalStatusRings,
     shutterUpper,
     shutterLower,
@@ -853,6 +946,7 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
       racking: 0,
       extractSlide: 0,
       doorAngle: 0,
+      rearDoorAngle: 0,
       contactStroke: 1,
       earthAngle: 0,
       needleKV: 0,

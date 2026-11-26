@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import {
+  ROOM_BOUNDS,
   PLAYER_RADIUS,
+  computeWalkWaypoints,
   getStationById,
   normalizeAngle,
   resolveCollision,
@@ -196,6 +198,7 @@ export function initSwitchroomGame(bridge) {
           <button type="button" class="game-dock-btn" data-walk-station="station:permit">Permit Desk</button>
           <button type="button" class="game-dock-btn" data-walk-station="station:trolley">VCB Trolley</button>
           <button type="button" class="game-dock-btn" data-walk-station="station:vcb-bench">VCB Maint</button>
+          <button type="button" class="game-dock-btn" data-walk-station="rear:BT1">Rear Aisle</button>
         </div>
         <span class="game-dock-sep" aria-hidden="true"></span>
         <div class="game-dock-group" aria-label="Walk to switchboard bay">
@@ -282,6 +285,20 @@ export function initSwitchroomGame(bridge) {
     }
   }
 
+  function setWalkTargetWithCorridors(goalX, goalZ, faceYaw, pendingStationId = null) {
+    const [firstPt, ...rest] = computeWalkWaypoints(
+      game.player.x,
+      game.player.z,
+      goalX,
+      goalZ,
+      faceYaw
+    );
+    game.player.targetPoint = firstPt;
+    game.player.waypoints = rest.length > 0 ? rest : null;
+    game.player.pendingStationId = pendingStationId;
+    room.showWalkMarker(goalX, goalZ);
+  }
+
   function walkToStation(stationId) {
     if (game.activeAnim) return;
     const sim = getSim();
@@ -293,9 +310,7 @@ export function initSwitchroomGame(bridge) {
       const rawZ = trolley.z - Math.cos(trolley.yaw) * 0.85;
       const extraObs = getTrolleyObstacleAabb(trolley);
       const pt = resolveCollision(rawX, rawZ, PLAYER_RADIUS, extraObs ? [extraObs] : []);
-      game.player.targetPoint = { x: pt.x, z: pt.z, faceYaw: trolley.yaw };
-      game.player.pendingStationId = 'station:trolley';
-      room.showWalkMarker(pt.x, pt.z);
+      setWalkTargetWithCorridors(pt.x, pt.z, trolley.yaw, 'station:trolley');
       return;
     }
 
@@ -320,10 +335,8 @@ export function initSwitchroomGame(bridge) {
       faceYaw = Math.PI;
     }
 
-    game.player.targetPoint = { x: goalX, z: goalZ, faceYaw };
-    game.player.pendingStationId = st.id;
-    room.showWalkMarker(goalX, goalZ);
-    if (st.kind === 'bay' && st.cubId) {
+    setWalkTargetWithCorridors(goalX, goalZ, faceYaw, st.id);
+    if ((st.kind === 'bay' || st.kind === 'rear-bay') && st.cubId) {
       simActions.selectCubicle(st.cubId);
     }
   }
@@ -436,6 +449,9 @@ export function initSwitchroomGame(bridge) {
         break;
       case 'toggleDoor':
         simActions.toggleDoor3D(action.arg);
+        break;
+      case 'toggleRearDoor':
+        simActions.toggleRearDoor(action.arg);
         break;
       case 'toggleShutterPadlock':
         simActions.toggleShutterPadlock(action.arg);
@@ -558,6 +574,11 @@ export function initSwitchroomGame(bridge) {
     }
     const cub = sim.cubicles[st.cubId];
     if (!cub) return '';
+    if (st.kind === 'rear-bay') {
+      const cover = cub.rearDoorOpen ? 'REAR OPEN' : 'REAR BOLTED';
+      const earth = cub.earthSwitchClosed ? ' · EARTHED' : '';
+      return `${cover}${earth}`;
+    }
     const vcb = cub.vcbExtracted ? 'WITHDRAWN (TROLLEY)' : cub.vcbClosed ? 'CLOSED' : 'OPEN';
     const truck = cub.isHV && !cub.vcbExtracted ? ` · Truck ${cub.rackingTurns}/20` : '';
     const latched = sim.trolley?.latchedBayId === cub.id ? ' · TROLLEY LATCHED' : '';
@@ -607,7 +628,7 @@ export function initSwitchroomGame(bridge) {
         sim.trolley.state === 'PUSHING' ? findAlignableBay(sim.trolley, sim)?.cubId || null : null,
         isInMaintenanceZone(sim.trolley),
       ] : null,
-      cub ? [cub.vcbClosed, cub.rackingTurns, cub.vcbExtracted, cub.rackingPadlocked, cub.castellLockedOut, cub.earthSwitchClosed, cub.earthPadlocked, cub.earthKeysInserted.join(','), cub.doorOpen, cub.topShutterPadlocked, cub.cme.pe, cub.cme.L1, cub.cme.L2, cub.cme.L3] : null,
+      cub ? [cub.vcbClosed, cub.rackingTurns, cub.vcbExtracted, cub.rackingPadlocked, cub.castellLockedOut, cub.earthSwitchClosed, cub.earthPadlocked, cub.earthKeysInserted.join(','), cub.doorOpen, cub.rearDoorOpen, cub.topShutterPadlocked, cub.cme.pe, cub.cme.L1, cub.cme.L2, cub.cme.L3] : null,
     ]);
 
     if (!force && hudKey === game.lastHudKey) return;
@@ -792,7 +813,8 @@ export function initSwitchroomGame(bridge) {
       interaction.pickAtNdc(_ndc.x, _ndc.y, 2.8) ||
       (game.cameraMode === 'first' ? interaction.pickAtNdc(0, 0, 2.8) : null);
     if (picked?.resolution?.action) {
-      const baySt = getStationById(`bay:${picked.meta.cubId}`) || game.nearbyStation;
+      const stationPrefix = picked.meta.controlId === 'rearDoorHandle' ? 'rear' : 'bay';
+      const baySt = getStationById(`${stationPrefix}:${picked.meta.cubId}`) || game.nearbyStation;
       startAnimatedAction(picked.resolution.action, baySt);
       return;
     }
@@ -827,9 +849,7 @@ export function initSwitchroomGame(bridge) {
     const floorHit = hits.find((h) => h.object.userData.walkFloor);
     if (floorHit && !game.activeAnim) {
       const pt = floorHit.point;
-      game.player.targetPoint = { x: pt.x, z: pt.z };
-      game.player.pendingStationId = null;
-      room.showWalkMarker(pt.x, pt.z);
+      setWalkTargetWithCorridors(pt.x, pt.z, undefined, null);
     }
   });
 
@@ -881,7 +901,7 @@ export function initSwitchroomGame(bridge) {
     const near = findNearestInteractable(game.player.x, game.player.z, sim);
     if (near?.id !== game.nearbyStation?.id) {
       game.nearbyStation = near;
-      if (near?.kind === 'bay' && near.cubId && sim.selectedCubicle !== near.cubId) {
+      if ((near?.kind === 'bay' || near?.kind === 'rear-bay') && near.cubId && sim.selectedCubicle !== near.cubId) {
         simActions.selectCubicle(near.cubId);
       }
       refreshHud(true);
@@ -896,7 +916,9 @@ export function initSwitchroomGame(bridge) {
         if (st) {
           const faceYaw = sim.trolley?.state === 'PUSHING' ? Math.PI : st.faceYaw;
           game.player.yaw = faceYaw;
-          if (game.cameraMode === 'first') game.camYaw = faceYaw;
+          if (game.cameraMode === 'first' || st.kind === 'rear-bay') {
+            game.camYaw = faceYaw;
+          }
         }
       }
       game.player.pendingStationId = null;
@@ -932,11 +954,16 @@ export function initSwitchroomGame(bridge) {
       const rawZ = game.player.z - Math.cos(game.camYaw) * dist * Math.cos(game.camPitch);
       const rawY = 1.48 + Math.sin(game.camPitch) * dist;
 
-      _camGoalPos.set(
-        THREE.MathUtils.clamp(rawX, -3.95, 3.95),
-        THREE.MathUtils.clamp(rawY, 1.05, 3.05),
-        THREE.MathUtils.clamp(rawZ, 0.55, 5.45)
-      );
+      let goalCamX = THREE.MathUtils.clamp(rawX, ROOM_BOUNDS.minX + 0.05, ROOM_BOUNDS.maxX - 0.05);
+      const goalCamY = THREE.MathUtils.clamp(rawY, 1.05, 3.20);
+      let goalCamZ = THREE.MathUtils.clamp(rawZ, ROOM_BOUNDS.minZ - 0.05, ROOM_BOUNDS.maxZ + 0.05);
+
+      // Keep 3rd-person camera from clipping inside the 5-bay switchboard enclosure
+      if (goalCamX > -2.38 && goalCamX < 2.38 && goalCamZ > -0.82 && goalCamZ < 0.88) {
+        goalCamZ = game.player.z < 0 ? -0.88 : 0.92;
+      }
+
+      _camGoalPos.set(goalCamX, goalCamY, goalCamZ);
       camera.position.lerp(_camGoalPos, 1 - Math.exp(-10 * clampedDt));
 
       _camGoalLook.set(

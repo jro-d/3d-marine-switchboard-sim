@@ -97,3 +97,39 @@ test('interlocks block live racking and live earthing with -5 score deduction', 
   // Topology reflects live bus on BT-M1 before trip
   assert.equal(getTopology(sim).btVolts, 6600);
 });
+
+test('toggleRearDoor blocks live or unearthed opening and opens safely once isolated', () => {
+  const sim = createSimState();
+  const actions = createSimActions(sim);
+  equipFullPpe(sim);
+
+  // Blocked while BT-M1 is energized in SERVICE
+  assert.equal(actions.toggleRearDoor('BT-M1'), false);
+  assert.equal(sim.cubicles['BT-M1'].rearDoorOpen, false);
+  assert.equal(sim.score, 95);
+
+  // Isolate and earth BT-M1
+  actions.pressTripVCB('BT-M1');
+  actions.rackVCB('BT-M1', -20);
+  // Still blocked before EK6 earth switch is closed
+  assert.equal(actions.toggleRearDoor('BT-M1'), false);
+  assert.equal(sim.cubicles['BT-M1'].rearDoorOpen, false);
+
+  actions.toggleCastellVCBLock('BT-M1');
+  actions.toggleEarthSwitchKey('BT-M1', 'K1-BT');
+  actions.toggleIntegralEarthSwitch('BT-M1');
+  assert.equal(actions.toggleRearDoor('BT-M1'), true);
+  assert.equal(sim.cubicles['BT-M1'].rearDoorOpen, true);
+
+  // BT1 bus-tie rear splice chamber opens safely once BT1 VCB is withdrawn & red shutter padlocked
+  actions.pressTripVCB('BT1');
+  actions.rackVCB('BT1', -20);
+  sim.cubicles['BT1'].doorOpen = true;
+  actions.latchTrolley('BT1');
+  actions.withdrawVcbToTrolley('BT1');
+  actions.unlatchTrolley();
+  actions.releaseTrolley();
+  actions.toggleShutterPadlock('BT1');
+  assert.equal(actions.toggleRearDoor('BT1'), true);
+  assert.equal(sim.cubicles['BT1'].rearDoorOpen, true);
+});

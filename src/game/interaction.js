@@ -224,6 +224,34 @@ export function resolveControlInteraction(meta, sim, _topo = {}) {
         },
       };
 
+    case 'rearDoorHandle':
+      return {
+        title: `${bayLabel} · Rear Cable & Bus-Tie Cover`,
+        subtitle: cub.rearDoorOpen
+          ? 'Rear Inspection Cover OPEN'
+          : cub.earthSwitchClosed || (cubId === 'BT1' && cub.vcbExtracted && cub.topShutterPadlocked)
+            ? 'Earthed & Safe to Unbolt'
+            : 'Bolted & Interlocked (Isolate & Earth First)',
+        actionLabel: cub.rearDoorOpen
+          ? 'Click to Close & Bolt Rear Cover'
+          : 'Click to Unbolt & Open Rear Cover',
+        statusTone: cub.rearDoorOpen
+          ? 'accent'
+          : cub.earthSwitchClosed || (cubId === 'BT1' && cub.vcbExtracted && cub.topShutterPadlocked)
+            ? 'safe'
+            : 'warn',
+        socketId: 'rearDoorHandle',
+        action: {
+          id: 'toggle_rear_door',
+          label: cub.rearDoorOpen ? 'Close & Bolt Rear Inspection Cover' : 'Unbolt & Open Rear Inspection Cover',
+          anim: 'open_door',
+          tool: 'none',
+          duration: 1.0,
+          exec: 'toggleRearDoor',
+          arg: cubId,
+        },
+      };
+
     case 'ek6Socket':
       return {
         title: `${bayLabel} · EK6 Earth Switch Shaft`,
