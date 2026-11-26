@@ -112,9 +112,33 @@ export function buildLVBay({ bayX, MAT, SHARED_TEX, helpers }) {
   lvFrontDoor.position.set(0, 0.96, 0.49);
   const lowPanel = regMesh(new THREE.Mesh(new THREE.BoxGeometry(dW, 0.40, 0.016), MAT.steelPanel), 'FD', cubId);
   lowPanel.position.set(0, 0.27, 0.49);
-  const lvVentOpening = regMesh(new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.12), new THREE.MeshStandardMaterial({ color: 0x1d242b, roughness: 0.8 })), 'FD', cubId, { castShadow: false });
+  const lvVentOpening = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.135, 0.006), MAT.louverBlack), 'FD', cubId, { castShadow: false });
   lvVentOpening.position.set(0, 0.22, 0.499);
   subGroups.FD.add(lvFrontDoor, lowPanel, lvVentOpening);
+  // 3D beveled ventilation louver frame + 6 angled stamped steel slats + door knuckle hinges
+  [
+    [0, 0.292, 0.40, 0.012],
+    [0, 0.148, 0.40, 0.012],
+    [-0.194, 0.22, 0.012, 0.156],
+    [0.194, 0.22, 0.012, 0.156],
+  ].forEach(([lx, ly, lw, lh]) => {
+    const fBar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(lw, lh, 0.010), MAT.steelTrim), 'FD', cubId, { castShadow: false });
+    fBar.position.set(lx, ly, 0.502);
+    subGroups.FD.add(fBar);
+  });
+  for (let li = 0; li < 6; li++) {
+    const slat = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.368, 0.012, 0.010), MAT.steelLight), 'FD', cubId, { castShadow: false });
+    slat.position.set(0, 0.168 + li * 0.020, 0.503);
+    slat.rotation.x = 0.42;
+    subGroups.FD.add(slat);
+  }
+  [-0.36, 0.0, 0.36].forEach((hy) => {
+    const hingeBarrel = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.052, 12), MAT.darkConsole), 'FD', cubId);
+    hingeBarrel.position.set(-dW / 2, 0.96 + hy, 0.504);
+    const hingePin = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.064, 10), MAT.silverContact), 'FD', cubId, { castShadow: false });
+    hingePin.position.set(-dW / 2, 0.96 + hy, 0.504);
+    subGroups.FD.add(hingeBarrel, hingePin);
+  });
   {
     const hL = -0.22;
     const hR = 0.22;

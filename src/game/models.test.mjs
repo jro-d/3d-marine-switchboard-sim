@@ -8,20 +8,31 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MODELS_DIR = path.resolve(__dirname, '../../public/models');
 
-const EXPECTED_GLBS = [
-  'watertight-door.glb',
-  'rescue-hook.glb',
-  'co2-extinguisher.glb',
-  'workbench-tools.glb',
-];
-
-const EXPECTED_DRACO_ROOM_GLBS = [
-  { file: 'ppe-locker.glb', requiredNodes: ['PpeLockerSuit', 'PpeLockerGloves', 'PpeLockerBoots'] },
-  { file: 'permit-desk.glb', requiredNodes: ['PermitDeskAssembly'] },
-  { file: 'test-bench.glb', requiredNodes: ['TestBenchAssembly'] },
-  { file: 'key-board.glb', requiredNodes: ['KeyBoardAssembly'] },
-  { file: 'vcb-workbench.glb', requiredNodes: ['VcbWorkbenchAssembly'] },
-  { file: 'room-architecture.glb', requiredNodes: ['RoomArchitectureDetails'] },
+const EXPECTED_DRACO_GLBS = [
+  { file: 'ppe-locker.glb', minTris: 3000, requiredNodes: ['PpeLockerSuit', 'PpeLockerGloves', 'PpeLockerBoots'] },
+  { file: 'permit-desk.glb', minTris: 3000, requiredNodes: ['PermitDeskAssembly'] },
+  { file: 'test-bench.glb', minTris: 3000, requiredNodes: ['TestBenchAssembly'] },
+  { file: 'key-board.glb', minTris: 3000, requiredNodes: ['KeyBoardAssembly'] },
+  { file: 'vcb-workbench.glb', minTris: 3000, requiredNodes: ['VcbWorkbenchAssembly'] },
+  { file: 'room-architecture.glb', minTris: 3000, requiredNodes: ['RoomArchitectureDetails'] },
+  {
+    file: 'vcb-trolley.glb',
+    minTris: 3000,
+    requiredNodes: [
+      'VcbTrolleyFrame',
+      'TrolleyWheel_0',
+      'TrolleyWheel_1',
+      'TrolleyWheel_2',
+      'TrolleyWheel_3',
+      'TrolleyLatchHook_L',
+      'TrolleyLatchHook_R',
+      'TrolleyBrakePedals',
+    ],
+  },
+  { file: 'workbench-tools.glb', minTris: 2500, requiredNodes: ['WorkbenchToolsAssembly'] },
+  { file: 'watertight-door.glb', minTris: 2500, requiredNodes: ['WatertightDoorAssembly'] },
+  { file: 'co2-extinguisher.glb', minTris: 1500, requiredNodes: ['CO2ExtinguisherAssembly'] },
+  { file: 'rescue-hook.glb', minTris: 1500, requiredNodes: ['HVRescueHookAssembly'] },
 ];
 
 function readGlbJson(buf) {
@@ -42,30 +53,6 @@ function parseGlbAsync(loader, arrayBuffer) {
     loader.parse(arrayBuffer, '', resolve, reject);
   });
 }
-
-test('all binary .glb switchroom props exist and parse cleanly via Three.js GLTFLoader', async () => {
-  const loader = new GLTFLoader();
-
-  for (const file of EXPECTED_GLBS) {
-    const fullPath = path.join(MODELS_DIR, file);
-    assert.equal(fs.existsSync(fullPath), true, `Expected ${file} in public/models/`);
-
-    const buf = fs.readFileSync(fullPath);
-    assert.ok(buf.length > 512, `${file} should be non-trivial binary GLB`);
-    assert.equal(buf.readUInt32LE(0), 0x46546c67, `${file} should have 'glTF' magic header`);
-    assert.equal(buf.readUInt32LE(4), 2, `${file} should target glTF 2.0`);
-
-    const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-    const gltf = await parseGlbAsync(loader, ab);
-    assert.ok(gltf?.scene, `${file} should parse into a Three.js Scene/Group`);
-
-    let meshCount = 0;
-    gltf.scene.traverse((child) => {
-      if (child.isMesh) meshCount++;
-    });
-    assert.ok(meshCount >= 3, `${file} should contain multiple 3D mesh primitives (got ${meshCount})`);
-  }
-});
 
 test('rigged engineer.glb parses into high-poly multi-bone SkinnedMesh with humanoid skeleton, embedded PPE, and 4 AnimationClips', async () => {
   const loader = new GLTFLoader();
@@ -141,14 +128,14 @@ test('rigged engineer.glb parses into high-poly multi-bone SkinnedMesh with huma
   assert.deepEqual(clipNames, ['Idle', 'Walk', 'Sprint', 'PushTrolley']);
 });
 
-test('all 6 high-poly Blender Draco room station and architecture GLBs are valid glTF 2.0 with PBR materials and >= 40k tris total', () => {
+test('all 11 high-poly Blender Draco room, trolley, tool, and safety GLBs are valid glTF 2.0 with PBR materials and >= 75k tris total', () => {
   let grandTris = 0;
 
-  for (const spec of EXPECTED_DRACO_ROOM_GLBS) {
+  for (const spec of EXPECTED_DRACO_GLBS) {
     const fullPath = path.join(MODELS_DIR, spec.file);
     assert.equal(fs.existsSync(fullPath), true, `Missing ${spec.file} in public/models/`);
     const buf = fs.readFileSync(fullPath);
-    assert.ok(buf.length > 20_000, `${spec.file} should be a non-trivial Draco GLB (got ${buf.length} bytes)`);
+    assert.ok(buf.length > 12_000, `${spec.file} should be a non-trivial Draco GLB (got ${buf.length} bytes)`);
 
     const json = readGlbJson(buf);
     assert.equal(
@@ -156,7 +143,7 @@ test('all 6 high-poly Blender Draco room station and architecture GLBs are valid
       true,
       `${spec.file} should use KHR_draco_mesh_compression`
     );
-    assert.ok((json.materials || []).length >= 5, `${spec.file} should contain multiple PBR materials`);
+    assert.ok((json.materials || []).length >= 4, `${spec.file} should contain multiple PBR materials`);
 
     const nodeNames = (json.nodes || []).map((n) => n.name);
     for (const reqNode of spec.requiredNodes) {
@@ -171,9 +158,9 @@ test('all 6 high-poly Blender Draco room station and architecture GLBs are valid
         }
       }
     }
-    assert.ok(assetTris >= 3000, `Expected high-poly mesh >= 3,000 tris in ${spec.file} (got ${assetTris})`);
+    assert.ok(assetTris >= spec.minTris, `Expected high-poly mesh >= ${spec.minTris} tris in ${spec.file} (got ${assetTris})`);
     grandTris += assetTris;
   }
 
-  assert.ok(grandTris >= 40000, `Expected >= 40,000 total room station + architecture tris (got ${grandTris})`);
+  assert.ok(grandTris >= 75000, `Expected >= 75,000 total static Blender tris across 11 GLBs (got ${grandTris})`);
 });

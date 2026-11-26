@@ -41,7 +41,14 @@ const JOBS = [
   {
     id: 'trolley-and-tools',
     script: path.join(__dirname, 'build_trolley_and_tools.py'),
-    outputs: ['public/models/workbench-tools.glb'],
+    outputs: [
+      'public/models/vcb-trolley.glb',
+      'public/models/workbench-tools.glb',
+      'public/models/watertight-door.glb',
+      'public/models/co2-extinguisher.glb',
+      'public/models/rescue-hook.glb',
+      'assets-src/blender/trolley_and_tools.blend',
+    ],
   },
 ];
 

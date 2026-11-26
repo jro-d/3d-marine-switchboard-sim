@@ -238,8 +238,23 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   [-0.38, 0.0, 0.38].forEach((hy) => {
     const hinge = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.052, 12), MAT.darkConsole), 'FD', cubId);
     hinge.position.set(0.0, hy, 0.014);
-    doorHingeGroup.add(hinge);
+    const pin = regMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.066, 10), MAT.silverContact), 'FD', cubId, { castShadow: false });
+    pin.position.set(0.0, hy, 0.014);
+    const leaf = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.036, 0.006), MAT.steelTrim), 'FD', cubId, { castShadow: false });
+    leaf.position.set(0.016, hy, 0.019);
+    doorHingeGroup.add(hinge, pin, leaf);
   });
+
+  // Lower door ventilation louver bezel & 4 stamped angled cooling slats below operating cutout
+  const hvVentBack = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.064, 0.005), MAT.louverBlack), 'FD', cubId, { castShadow: false });
+  hvVentBack.position.set(dW * 0.5, -0.435, 0.019);
+  doorHingeGroup.add(hvVentBack);
+  for (let li = 0; li < 4; li++) {
+    const slat = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.009, 0.008), MAT.steelTrim), 'FD', cubId, { castShadow: false });
+    slat.position.set(dW * 0.5, -0.456 + li * 0.014, 0.023);
+    slat.rotation.x = 0.42;
+    doorHingeGroup.add(slat);
+  }
 
   const handleEsc = regMesh(
     new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.19, 0.014), MAT.darkConsole),
