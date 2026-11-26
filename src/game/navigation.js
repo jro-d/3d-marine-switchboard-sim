@@ -497,6 +497,7 @@ export function getRecommendedTarget(sim) {
   }
 
   const bt = sim.cubicles['BT-M1'];
+  const bt1 = sim.cubicles['BT1'];
   const tr = sim.cubicles['TR1-HV'];
   const lv = sim.cubicles['ACB-TR1-LV'];
 
@@ -614,6 +615,80 @@ export function getRecommendedTarget(sim) {
       return { stationId: 'station:permit', hint: 'Walk to the Permit Desk to cancel Sanction-for-Test (SFT)' };
     }
     return { stationId: 'station:permit', hint: 'Mission 03 Complete — 5 kV Megger & PI test verified!' };
+  }
+
+  if (sim.missionId === 5 && bt1) {
+    const ts = sim.troubleshooting || {};
+    if (bt1.vcbClosed) return { stationId: 'bay:BT1', hint: 'Walk to C2 (BT1) Bus-Tie and Trip VCB [O] (DG1 Bus A stays live)' };
+    if (!bt1.vcbExtracted) {
+      if (!ts.tulipReplaced || !ts.rearBoltTorqued) {
+        if (bt1.rackingTurns > 0) return { stationId: 'bay:BT1', hint: 'At C2 (BT1), crank bus-tie VCB truck out to DISCONNECTED (0/20)' };
+        if (!bt1.rackingPadlocked) return { stationId: 'bay:BT1', hint: 'At C2 (BT1), apply LOTO padlock to racking shutter port' };
+        if (!bt1.doorOpen) return { stationId: 'bay:BT1', hint: 'At C2 (BT1), open the VCB compartment door' };
+        if (sim.trolley?.latchedBayId === 'BT1') {
+          return { stationId: 'bay:BT1', hint: 'At C2 (BT1), withdraw the bus-tie VCB cassette onto the latched trolley' };
+        }
+        if (sim.trolley?.state === 'PUSHING') {
+          return { stationId: 'bay:BT1', hint: 'Wheel the VCB Trolley in front of C2 (BT1) and latch guide rails' };
+        }
+        return { stationId: 'station:trolley', hint: 'Walk to the VCB Service Trolley and grab the push-bar to withdraw BT1' };
+      }
+    }
+    if (bt1.vcbExtracted && (!ts.contactResistanceTested || !ts.tulipReplaced)) {
+      if (sim.trolley?.latchedBayId === 'BT1') {
+        return { stationId: 'bay:BT1', hint: 'Unlatch the loaded BT1 trolley and wheel it to the VCB Maintenance Bay' };
+      }
+      if (sim.trolley?.state !== 'MAINTENANCE_PARKED') {
+        return { stationId: 'station:vcb-bench', hint: 'Wheel BT1 VCB to the Port-Forward VCB Maintenance Bay & lock wheel brakes' };
+      }
+      if (!bt1.topShutterPadlocked) {
+        return { stationId: 'bay:BT1', hint: 'Return to C2 (BT1) & padlock the red live Bus-A upper shutter' };
+      }
+      if (!sim.ptp.completedCubicles['BT1']) {
+        if (sim.ptp.state === 0 || sim.ptp.state === 2) {
+          return { stationId: 'station:test', hint: 'Walk to the Proving Bench to verify the 6.6 kV proving wand on the Proving Unit' };
+        }
+        return { stationId: 'bay:BT1', hint: 'At C2 (BT1), probe L1, L2, L3 lower Bus-B spouts dead' };
+      }
+      if (!ts.contactResistanceTested) {
+        return { stationId: 'station:vcb-bench', hint: 'Walk to VCB Maintenance Bay & run 100A DLRO contact resistance test on BT1 VCB' };
+      }
+      return { stationId: 'station:vcb-bench', hint: 'At VCB Workbench, replace the worn Phase L2 tulip contact cluster (184 µΩ -> 22 µΩ)' };
+    }
+    if (!bt1.topShutterPadlocked && !ts.rearBoltTorqued) {
+      return { stationId: 'bay:BT1', hint: 'At C2 (BT1), padlock red Bus-A shutter before entering the Rear Aisle' };
+    }
+    if (!sim.ptp.completedCubicles['BT1'] && !ts.rearBoltTorqued) {
+      if (sim.ptp.state === 0 || sim.ptp.state === 2) {
+        return { stationId: 'station:test', hint: 'Walk to the Proving Bench to verify the 6.6 kV proving wand' };
+      }
+      return { stationId: 'bay:BT1', hint: 'At C2 (BT1), probe L1, L2, L3 dead before opening the rear bus-tie panel' };
+    }
+    if (!ts.rearBoltTorqued || bt1.rearDoorOpen) {
+      return { stationId: 'rear:BT1', hint: 'Walk around corridor to Rear C2 (BT1), unbolt cover, torque L2 bolt to 45 N·m & close cover' };
+    }
+    if (bt1.vcbExtracted) {
+      if (sim.trolley?.latchedBayId === 'BT1') {
+        return { stationId: 'bay:BT1', hint: 'At C2 (BT1), slide repaired BT1 VCB cassette back into 0/20 rails' };
+      }
+      if (sim.trolley?.state === 'PUSHING') {
+        return { stationId: 'bay:BT1', hint: 'Wheel repaired BT1 VCB Trolley back to C2 (BT1) and latch rails' };
+      }
+      return { stationId: 'station:trolley', hint: 'Grab BT1 VCB Trolley at Maintenance Bay & wheel back to C2 (BT1)' };
+    }
+    if (sim.trolley?.latchedBayId === 'BT1') {
+      return { stationId: 'bay:BT1', hint: 'Unlatch empty VCB Trolley from C2 (BT1) before closing door' };
+    }
+    if (bt1.topShutterPadlocked || bt1.doorOpen) {
+      return { stationId: 'bay:BT1', hint: 'At C2 (BT1), unlock red Bus-A shutter padlock & close/bolt compartment door' };
+    }
+    if (!bt1.testFunctionCheckedInTestPos) {
+      return { stationId: 'bay:BT1', hint: 'At C2 (BT1), remove racking padlock, crank to TEST (10/20) & check Close/Trip' };
+    }
+    if (bt1.rackingTurns < 20) {
+      return { stationId: 'bay:BT1', hint: 'At C2 (BT1), crank BT1 bus-tie VCB fully into SERVICE (20/20)' };
+    }
+    return { stationId: 'bay:BT1', hint: 'Mission 05 Complete — BT1 repaired & Bus-Tie restored to SERVICE!' };
   }
 
   const cmeClean = !bt.cme.pe && !bt.cme.L1 && !bt.cme.L2 && !bt.cme.L3 && bt.cme.removedProperly;
@@ -908,6 +983,35 @@ export function getStationActions(stationId, sim) {
         exec: 'unlatchTrolley',
       });
     } else {
+      const ts = sim.troubleshooting || {};
+      const needsDiag =
+        sim.missionId === 5 &&
+        t.state === 'MAINTENANCE_PARKED' &&
+        t.carriedCubId === 'BT1' &&
+        !ts.tulipReplaced;
+      if (needsDiag) {
+        actions.push({
+          id: 'dlro_test',
+          label: ts.contactResistanceTested
+            ? `DLRO Result: L2 ${ts.contactResistanceMicroOhm} µΩ FAULT (Re-Test)`
+            : 'Run 100A DLRO Contact Resistance Test on BT1 VCB',
+          anim: 'megger_test',
+          tool: 'megger_leads',
+          duration: 1.05,
+          done: ts.contactResistanceTested,
+          primary: !ts.contactResistanceTested,
+          exec: 'runContactTest',
+        });
+        actions.push({
+          id: 'replace_tulip',
+          label: 'Replace Worn L2 Tulip Cluster & Verify <= 30 µΩ',
+          anim: 'rack_crank',
+          tool: 'racking_handle',
+          duration: 1.15,
+          primary: Boolean(ts.contactResistanceTested && !ts.tulipReplaced),
+          exec: 'replaceTulip',
+        });
+      }
       actions.push({
         id: 'trolley_grab',
         label: t.carriedCubId
@@ -916,7 +1020,7 @@ export function getStationActions(stationId, sim) {
         anim: 'pull_lever',
         tool: 'none',
         duration: 0.55,
-        primary: true,
+        primary: !needsDiag,
         exec: 'grabTrolley',
       });
     }
@@ -925,22 +1029,50 @@ export function getStationActions(stationId, sim) {
 
   if (stationId === 'station:vcb-bench') {
     const t = sim.trolley;
-    if (t && !t.latchedBayId && isInMaintenanceZone(t)) {
-      return [
-        {
-          id: 'trolley_grab',
-          label: t.carriedCubId
-            ? `Release Brakes & Push Trolley (Carrying ${t.carriedCubId} VCB)`
-            : 'Release Brakes & Grab VCB Trolley Push-Bar',
-          anim: 'pull_lever',
-          tool: 'none',
-          duration: 0.55,
-          primary: true,
-          exec: 'grabTrolley',
-        },
-      ];
+    const ts = sim.troubleshooting || {};
+    const benchActions = [];
+    if (sim.missionId === 5 && t && t.carriedCubId === 'BT1' && t.state === 'MAINTENANCE_PARKED') {
+      if (!ts.contactResistanceTested || !ts.tulipReplaced) {
+        benchActions.push({
+          id: 'dlro_test',
+          label: ts.contactResistanceTested
+            ? `DLRO Reading: L2 = ${ts.contactResistanceMicroOhm} µΩ FAULT (>60 µΩ)`
+            : 'Run 100A DLRO Micro-Ohmmeter Test on BT1 VCB',
+          anim: 'megger_test',
+          tool: 'megger_leads',
+          duration: 1.05,
+          done: ts.contactResistanceTested,
+          primary: !ts.contactResistanceTested,
+          exec: 'runContactTest',
+        });
+        benchActions.push({
+          id: 'replace_tulip',
+          label: ts.tulipReplaced
+            ? 'L2 Tulip Cluster Replaced (22 µΩ PASS)'
+            : 'Replace Worn Phase L2 Tulip Contact Cluster',
+          anim: 'rack_crank',
+          tool: 'racking_handle',
+          duration: 1.15,
+          done: ts.tulipReplaced,
+          primary: Boolean(ts.contactResistanceTested && !ts.tulipReplaced),
+          exec: 'replaceTulip',
+        });
+      }
     }
-    return [];
+    if (t && !t.latchedBayId && isInMaintenanceZone(t)) {
+      benchActions.push({
+        id: 'trolley_grab',
+        label: t.carriedCubId
+          ? `Release Brakes & Push Trolley (Carrying ${t.carriedCubId} VCB)`
+          : 'Release Brakes & Grab VCB Trolley Push-Bar',
+        anim: 'pull_lever',
+        tool: 'none',
+        duration: 0.55,
+        primary: benchActions.length === 0 || Boolean(ts.tulipReplaced),
+        exec: 'grabTrolley',
+      });
+    }
+    return benchActions;
   }
 
   const st = getStationById(stationId);
@@ -949,20 +1081,36 @@ export function getStationActions(stationId, sim) {
   if (st.kind === 'rear-bay') {
     const cub = sim.cubicles[st.cubId];
     if (!cub) return [];
-    return [
-      {
-        id: 'toggle_rear_door',
-        label: cub.rearDoorOpen
-          ? `Close & Bolt ${cub.id} Rear Inspection Cover`
-          : `Unbolt & Open ${cub.id} Rear Cable / Bus-Tie Cover`,
-        anim: 'open_door',
-        tool: 'none',
-        duration: 1.0,
-        primary: true,
-        exec: 'toggleRearDoor',
-        arg: cub.id,
-      },
-    ];
+    const rearActions = [];
+    const ts = sim.troubleshooting || {};
+    if (cub.id === 'BT1' && cub.rearDoorOpen && sim.missionId === 5) {
+      rearActions.push({
+        id: 'torque_bt1_bolt',
+        label: ts.rearBoltTorqued
+          ? 'BT1 L2 Bus-Tie M16 Splice Bolt Torqued (45 N·m PASS)'
+          : `Torque Loose L2 Bus-Tie Splice Bolt (${ts.rearBoltTorqueNm} -> 45 N·m)`,
+        anim: 'rack_crank',
+        tool: 'racking_handle',
+        duration: 1.15,
+        done: ts.rearBoltTorqued,
+        primary: !ts.rearBoltTorqued,
+        exec: 'torqueRearBolt',
+        arg: 'BT1',
+      });
+    }
+    rearActions.push({
+      id: 'toggle_rear_door',
+      label: cub.rearDoorOpen
+        ? `Close & Bolt ${cub.id} Rear Inspection Cover`
+        : `Unbolt & Open ${cub.id} Rear Cable / Bus-Tie Cover`,
+      anim: 'open_door',
+      tool: 'none',
+      duration: 1.0,
+      primary: cub.id !== 'BT1' || !cub.rearDoorOpen || Boolean(ts.rearBoltTorqued),
+      exec: 'toggleRearDoor',
+      arg: cub.id,
+    });
+    return rearActions;
   }
 
   if (st.kind !== 'bay') return [];

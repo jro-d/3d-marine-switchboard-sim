@@ -588,6 +588,26 @@ export function buildSwitchboard(scene, renderer) {
       if (bm.meggerLeadsGroup) {
         bm.meggerLeadsGroup.visible = sim.megger.connectedCubicle === 'BT-M1';
       }
+
+      if (id === 'BT1') {
+        const ts = sim.troubleshooting;
+        const faultedL2 = sim.missionId === 5 && ts && !ts.tulipReplaced;
+        (bm.tulipFaultRings || []).forEach((ring) => {
+          setMeshColor(
+            ring,
+            faultedL2 ? 0xd93829 : 0x9aa4b2,
+            faultedL2 ? 0xd93829 : 0x000000,
+            faultedL2 ? (ts.contactResistanceTested ? 0.85 : 0.25) : 0.0
+          );
+        });
+        const looseBolt = sim.missionId === 5 && ts && !ts.rearBoltTorqued;
+        (bm.bt1WitnessMeshes || []).forEach((w, idx) => {
+          if (idx === 1) {
+            w.rotation.z = looseBolt ? 0.48 : 0.0;
+            setMeshColor(w, looseBolt ? 0xf59e0b : 0x22c55e, looseBolt ? 0xd97706 : 0x000000, looseBolt ? 0.5 : 0.0);
+          }
+        });
+      }
     });
 
     // Sync C5 · ACB-TR1-LV

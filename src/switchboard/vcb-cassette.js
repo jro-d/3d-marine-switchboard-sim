@@ -470,6 +470,7 @@ export function buildVcbCassette({ cubId, MAT, SHARED_TEX, helpers, subGroups, s
   /* 12, 13, 14 · EP, VI, TL */
   const movingVacuumStems = [];
   const movingBellows = [];
+  const tulipFaultRings = [];
   const polePhaseMats = [MAT.phaseL1, MAT.phaseL2, MAT.phaseL3];
 
   const poleBaseBeam = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.024, 0.115), MAT.galvSteel), 'EP', cubId);
@@ -578,9 +579,13 @@ export function buildVcbCassette({ cubId, MAT, SHARED_TEX, helpers, subGroups, s
         tulipCluster.add(finger, nosePad);
       }
       [-0.014, 0.000, 0.013].forEach((gz) => {
-        const garter = regMesh(new THREE.Mesh(new THREE.TorusGeometry(0.0305, 0.0036, 8, 22), MAT.galvSteel), 'TL', cubId);
+        const garter = regMesh(
+          new THREE.Mesh(new THREE.TorusGeometry(0.0305, 0.0036, 8, 22), MAT.galvSteel),
+          'TL', cubId, { cloneMaterial: pIdx === 1 }
+        );
         garter.position.z = gz;
         tulipCluster.add(garter);
+        if (pIdx === 1) tulipFaultRings.push(garter);
       });
       subGroups.TL.add(tulipCluster);
     });
@@ -697,5 +702,6 @@ export function buildVcbCassette({ cubId, MAT, SHARED_TEX, helpers, subGroups, s
     vcbCastellKey3D,
     movingVacuumStems,
     movingBellows,
+    tulipFaultRings,
   };
 }

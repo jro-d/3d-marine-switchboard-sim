@@ -813,14 +813,19 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
   addFasteners(subGroups.CT, 'CT', cubId, rectPoints(-0.30, 0.30, -0.36, -0.14, 0.15, 'xz', 0.034), { axis: 'y', r: 0.0042, h: 0.003 });
 
   // Dedicated 6.6 kV Bus-Tie splice links & M16 torque-witness bolts inside C2 (BT1) rear chamber
+  const bt1WitnessMeshes = [];
   if (cubId === 'BT1') {
     [-0.19, 0.0, 0.19].forEach((px, pIdx) => {
       const tieBar = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.044, 0.016), MAT.copper), 'BB', cubId);
       tieBar.position.set(px, 0.88 - pIdx * 0.05, -0.39);
       const splicePlate = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.054, 0.024), MAT.copper), 'BB', cubId);
       splicePlate.position.set(px, 0.88 - pIdx * 0.05, -0.39);
-      const witnessStripe = regMesh(new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.048, 0.028), MAT.shutterRed), 'BB', cubId, { castShadow: false });
+      const witnessStripe = regMesh(
+        new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.048, 0.028), MAT.shutterRed),
+        'BB', cubId, { castShadow: false, cloneMaterial: true, controlId: pIdx === 1 ? 'rearBusTieBolt' : undefined }
+      );
       witnessStripe.position.set(px, 0.88 - pIdx * 0.05, -0.39);
+      bt1WitnessMeshes.push(witnessStripe);
       subGroups.BB.add(tieBar, splicePlate, witnessStripe);
       addFasteners(
         subGroups.BB,
@@ -832,6 +837,9 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
         ],
         { dir: -1, hex: true, r: 0.008, h: 0.007, mat: MAT.brass }
       );
+    });
+    sockets.rearBusTieBolt = createSocket(subGroups.BB, 'rearBusTieBolt', cubId, [0.0, 0.83, -0.41], {
+      approachOffset: { x: 0.14, z: -0.96 },
     });
   }
 
@@ -924,6 +932,7 @@ export function buildHVBay({ cubId, bayX, titleText, subText, bayAccentHex, MAT,
     rearDoorHingeGroup,
     frontDoorLatch: handleLever,
     rearDoorLatch: rearHandleLever,
+    bt1WitnessMeshes,
     terminalStatusRings,
     shutterUpper,
     shutterLower,

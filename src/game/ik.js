@@ -64,6 +64,8 @@ export function resolveActionSocketMeta(action, sim) {
       return { cubId: action.arg, socketId: 'doorHandle' };
     case 'toggleRearDoor':
       return { cubId: action.arg, socketId: 'rearDoorHandle' };
+    case 'torqueRearBolt':
+      return { cubId: action.arg || 'BT1', socketId: 'rearBusTieBolt' };
     case 'toggleShutterPadlock':
       return { cubId: action.arg, socketId: 'shutterPadlock' };
     case 'probePhase':

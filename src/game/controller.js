@@ -501,6 +501,15 @@ export function initSwitchroomGame(bridge) {
       case 'reinsertVcb':
         simActions.reinsertVcbFromTrolley(action.arg);
         break;
+      case 'runContactTest':
+        simActions.runContactResistanceTest();
+        break;
+      case 'replaceTulip':
+        simActions.replaceVcbTulipContact();
+        break;
+      case 'torqueRearBolt':
+        simActions.torqueRearBusTieBolt(action.arg || 'BT1');
+        break;
     }
 
     if (sim.score < prevScore) {
@@ -626,6 +635,12 @@ export function initSwitchroomGame(bridge) {
     }
     if (st.id === 'station:vcb-bench') {
       const t = sim.trolley;
+      const ts = sim.troubleshooting;
+      if (sim.missionId === 5 && t?.carriedCubId === 'BT1' && isInMaintenanceZone(t)) {
+        if (ts?.tulipReplaced) return 'BT1 VCB · 22 µΩ PASS';
+        if (ts?.contactResistanceTested) return `BT1 VCB · L2 ${ts.contactResistanceMicroOhm} µΩ FAULT`;
+        return 'BT1 VCB Ready for DLRO Test';
+      }
       return t?.carriedCubId && isInMaintenanceZone(t)
         ? `${t.carriedCubId} VCB on Trolley`
         : 'Clear Inspection Zone';
@@ -685,6 +700,12 @@ export function initSwitchroomGame(bridge) {
         sim.trolley.carriedCubId,
         sim.trolley.state === 'PUSHING' ? findAlignableBay(sim.trolley, sim)?.cubId || null : null,
         isInMaintenanceZone(sim.trolley),
+      ] : null,
+      sim.troubleshooting ? [
+        sim.troubleshooting.contactResistanceTested,
+        sim.troubleshooting.contactResistanceMicroOhm,
+        sim.troubleshooting.tulipReplaced,
+        sim.troubleshooting.rearBoltTorqued,
       ] : null,
       cub ? [cub.vcbClosed, cub.rackingTurns, cub.vcbExtracted, cub.rackingPadlocked, cub.castellLockedOut, cub.earthSwitchClosed, cub.earthPadlocked, cub.earthKeysInserted.join(','), cub.doorOpen, cub.rearDoorOpen, cub.topShutterPadlocked, cub.cme.pe, cub.cme.L1, cub.cme.L2, cub.cme.L3] : null,
     ]);
