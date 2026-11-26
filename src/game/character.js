@@ -412,15 +412,29 @@ export function createEngineerCharacter({ autoLoadGlb = true } = {}) {
 
   function attachLoadedEngineerGltf(gltf) {
     if (!gltf?.scene) return false;
-    const skinnedMesh = gltf.scene.getObjectByProperty('isSkinnedMesh', true);
+    const skinnedMesh =
+      gltf.scene.getObjectByName('EngineerBodyMesh')?.getObjectByProperty('isSkinnedMesh', true) ||
+      gltf.scene.getObjectByProperty('isSkinnedMesh', true);
     if (!skinnedMesh || !skinnedMesh.skeleton) return false;
 
-    skinnedMesh.castShadow = true;
-    skinnedMesh.receiveShadow = true;
-    if (skinnedMesh.material) {
-      skinnedMesh.material.vertexColors = true;
-      skinnedMesh.material.needsUpdate = true;
-    }
+    gltf.scene.traverse((child) => {
+      if (!child.isMesh) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      const isTransparent = mats.some((m) => m && m.transparent);
+      child.castShadow = !isTransparent;
+      child.receiveShadow = true;
+      if (child.isSkinnedMesh) {
+        child.frustumCulled = false;
+      }
+      const hasVertexColors = Boolean(child.geometry?.hasAttribute?.('color'));
+      for (const m of mats) {
+        if (!m) continue;
+        if (hasVertexColors && !m.vertexColors) {
+          m.vertexColors = true;
+          m.needsUpdate = true;
+        }
+      }
+    });
 
     const bones = skinnedMesh.skeleton.bones;
     const boneByName = Object.fromEntries(bones.map((b) => [b.name, b]));
@@ -450,52 +464,99 @@ export function createEngineerCharacter({ autoLoadGlb = true } = {}) {
       },
     ]);
 
-    // Attach PPE & tool sockets directly to rigged skeleton bones
-    const rigArcCoat = buildArcSuitCoatGroup();
-    rigArcCoat.position.set(0, -0.12, 0);
-    boneByName.Chest?.add(rigArcCoat);
+    // Prefer embedded high-poly Blender sculpted PPE & 5-finger hand meshes when present;
+    // gracefully fall back to procedural bone-attached PPE overlays for external custom/Mixamo GLBs.
+    const glbArcCoat = gltf.scene.getObjectByName('EngineerArcSuitCoat');
+    const glbArcHood = gltf.scene.getObjectByName('EngineerArcHood');
+    const glbHardHat = gltf.scene.getObjectByName('EngineerHardHat');
+    const glbLeftBareHand = gltf.scene.getObjectByName('EngineerLeftBareHand');
+    const glbRightBareHand = gltf.scene.getObjectByName('EngineerRightBareHand');
+    const glbLeftGlove = gltf.scene.getObjectByName('EngineerLeftHvGlove');
+    const glbRightGlove = gltf.scene.getObjectByName('EngineerRightHvGlove');
+    const glbLeftSole = gltf.scene.getObjectByName('EngineerLeftHvSole');
+    const glbRightSole = gltf.scene.getObjectByName('EngineerRightHvSole');
 
-    const rigLeftSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.058, 0.30, 10), arcCoatMat);
-    rigLeftSleeve.position.set(0, -0.15, 0);
-    rigLeftSleeve.visible = false;
-    boneByName.LeftUpperArm?.add(rigLeftSleeve);
+    const hasEmbeddedPpe = Boolean(
+      glbArcCoat &&
+        glbArcHood &&
+        glbHardHat &&
+        glbLeftBareHand &&
+        glbRightBareHand &&
+        glbLeftGlove &&
+        glbRightGlove &&
+        glbLeftSole &&
+        glbRightSole
+    );
 
-    const rigRightSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.058, 0.30, 10), arcCoatMat);
-    rigRightSleeve.position.set(0, -0.15, 0);
-    rigRightSleeve.visible = false;
-    boneByName.RightUpperArm?.add(rigRightSleeve);
+    let rigArcCoat;
+    let rigLeftSleeve = null;
+    let rigRightSleeve = null;
+    let rigHardHat;
+    let rigArcHood;
+    let rigLeftBareHand;
+    let rigRightBareHand;
+    let rigLeftGlove;
+    let rigRightGlove;
+    let rigLeftSole;
+    let rigRightSole;
 
-    const rigHardHat = buildHardHatGroup();
-    const rigArcHood = buildArcHoodGroup();
-    boneByName.Head?.add(rigHardHat, rigArcHood);
+    if (hasEmbeddedPpe) {
+      rigArcCoat = glbArcCoat;
+      rigHardHat = glbHardHat;
+      rigArcHood = glbArcHood;
+      rigLeftBareHand = glbLeftBareHand;
+      rigRightBareHand = glbRightBareHand;
+      rigLeftGlove = glbLeftGlove;
+      rigRightGlove = glbRightGlove;
+      rigLeftSole = glbLeftSole;
+      rigRightSole = glbRightSole;
+    } else {
+      rigArcCoat = buildArcSuitCoatGroup();
+      rigArcCoat.position.set(0, -0.12, 0);
+      boneByName.Chest?.add(rigArcCoat);
 
-    const rigLeftBareHand = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.088, 0.062), skinMat);
-    rigLeftBareHand.position.set(0, -0.04, 0);
-    boneByName.LeftHand?.add(rigLeftBareHand);
+      rigLeftSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.058, 0.30, 10), arcCoatMat);
+      rigLeftSleeve.position.set(0, -0.15, 0);
+      rigLeftSleeve.visible = false;
+      boneByName.LeftUpperArm?.add(rigLeftSleeve);
 
-    const rigRightBareHand = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.088, 0.062), skinMat);
-    rigRightBareHand.position.set(0, -0.04, 0);
-    boneByName.RightHand?.add(rigRightBareHand);
+      rigRightSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.058, 0.30, 10), arcCoatMat);
+      rigRightSleeve.position.set(0, -0.15, 0);
+      rigRightSleeve.visible = false;
+      boneByName.RightUpperArm?.add(rigRightSleeve);
 
-    const rigLeftGlove = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.048, 0.21, 10), gloveMat);
-    rigLeftGlove.position.set(0, -0.19, 0);
-    rigLeftGlove.visible = false;
-    boneByName.LeftForeArm?.add(rigLeftGlove);
+      rigHardHat = buildHardHatGroup();
+      rigArcHood = buildArcHoodGroup();
+      boneByName.Head?.add(rigHardHat, rigArcHood);
 
-    const rigRightGlove = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.048, 0.21, 10), gloveMat);
-    rigRightGlove.position.set(0, -0.19, 0);
-    rigRightGlove.visible = false;
-    boneByName.RightForeArm?.add(rigRightGlove);
+      rigLeftBareHand = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.088, 0.062), skinMat);
+      rigLeftBareHand.position.set(0, -0.04, 0);
+      boneByName.LeftHand?.add(rigLeftBareHand);
 
-    const rigLeftSole = new THREE.Mesh(new THREE.BoxGeometry(0.132, 0.032, 0.252), hvBootSoleMat);
-    rigLeftSole.position.set(0, -0.055, 0.01);
-    rigLeftSole.visible = false;
-    boneByName.LeftFoot?.add(rigLeftSole);
+      rigRightBareHand = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.088, 0.062), skinMat);
+      rigRightBareHand.position.set(0, -0.04, 0);
+      boneByName.RightHand?.add(rigRightBareHand);
 
-    const rigRightSole = new THREE.Mesh(new THREE.BoxGeometry(0.132, 0.032, 0.252), hvBootSoleMat);
-    rigRightSole.position.set(0, -0.055, 0.01);
-    rigRightSole.visible = false;
-    boneByName.RightFoot?.add(rigRightSole);
+      rigLeftGlove = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.048, 0.21, 10), gloveMat);
+      rigLeftGlove.position.set(0, -0.19, 0);
+      rigLeftGlove.visible = false;
+      boneByName.LeftForeArm?.add(rigLeftGlove);
+
+      rigRightGlove = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.048, 0.21, 10), gloveMat);
+      rigRightGlove.position.set(0, -0.19, 0);
+      rigRightGlove.visible = false;
+      boneByName.RightForeArm?.add(rigRightGlove);
+
+      rigLeftSole = new THREE.Mesh(new THREE.BoxGeometry(0.132, 0.032, 0.252), hvBootSoleMat);
+      rigLeftSole.position.set(0, -0.055, 0.01);
+      rigLeftSole.visible = false;
+      boneByName.LeftFoot?.add(rigLeftSole);
+
+      rigRightSole = new THREE.Mesh(new THREE.BoxGeometry(0.132, 0.032, 0.252), hvBootSoleMat);
+      rigRightSole.position.set(0, -0.055, 0.01);
+      rigRightSole.visible = false;
+      boneByName.RightFoot?.add(rigRightSole);
+    }
 
     const rigToolSocket = new THREE.Group();
     rigToolSocket.name = 'RigRightToolSocket';
@@ -578,35 +639,79 @@ export function createEngineerCharacter({ autoLoadGlb = true } = {}) {
   const fpGroup = new THREE.Group();
   fpGroup.visible = false;
 
-  const fpForearmGeo = new THREE.CylinderGeometry(0.036, 0.044, 0.30, 10);
+  const fpForearmGeo = new THREE.CylinderGeometry(0.036, 0.046, 0.30, 16);
   fpForearmGeo.rotateX(Math.PI / 2);
-  const fpHandGeo = new THREE.BoxGeometry(0.062, 0.052, 0.095);
-  const fpGloveGeo = new THREE.CylinderGeometry(0.044, 0.052, 0.19, 10);
-  fpGloveGeo.rotateX(Math.PI / 2);
+  const fpCuffGeo = new THREE.CylinderGeometry(0.041, 0.042, 0.034, 16);
+  fpCuffGeo.rotateX(Math.PI / 2);
+  const fpGloveCuffGeo = new THREE.CylinderGeometry(0.047, 0.056, 0.21, 16);
+  fpGloveCuffGeo.rotateX(Math.PI / 2);
+  const fpLeatherProtectorMat = new THREE.MeshStandardMaterial({ color: 0xc2a475, roughness: 0.68, metalness: 0.02 });
+
+  function buildFpSculptedHand(sideSign, mat, scale = 1.0) {
+    const g = new THREE.Group();
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.058 * scale, 0.030 * scale, 0.072 * scale), mat);
+    palm.scale.set(1, 0.92, 1);
+    g.add(palm);
+
+    const fingerOffsets = [
+      [-0.020, 0.054, 0.0072],
+      [-0.007, 0.062, 0.0075],
+      [0.007, 0.057, 0.0072],
+      [0.020, 0.046, 0.0062],
+    ];
+    for (const [fx, flen, fr] of fingerOffsets) {
+      const fGeo = new THREE.CapsuleGeometry(fr * scale, flen * 0.62 * scale, 4, 8);
+      fGeo.rotateX(Math.PI / 2);
+      const fMesh = new THREE.Mesh(fGeo, mat);
+      fMesh.position.set(fx * sideSign * scale, -0.004 * scale, -(0.036 + flen * 0.44) * scale);
+      fMesh.rotation.x = -0.18;
+      g.add(fMesh);
+    }
+
+    const thumbGeo = new THREE.CapsuleGeometry(0.0085 * scale, 0.036 * scale, 4, 8);
+    thumbGeo.rotateX(Math.PI / 2);
+    const thumb = new THREE.Mesh(thumbGeo, mat);
+    thumb.position.set(-0.034 * sideSign * scale, -0.008 * scale, -0.018 * scale);
+    thumb.rotation.set(-0.15, sideSign * 0.55, 0);
+    g.add(thumb);
+    return g;
+  }
 
   const fpLeftPivot = new THREE.Group();
   fpLeftPivot.position.set(-0.27, -0.32, -0.44);
   const fpLeftForearm = new THREE.Mesh(fpForearmGeo, coverallMat);
-  const fpLeftHand = new THREE.Mesh(fpHandGeo, skinMat);
+  const fpLeftCuff = new THREE.Mesh(fpCuffGeo, coverallMat);
+  fpLeftCuff.position.z = -0.135;
+  const fpLeftHand = buildFpSculptedHand(-1, skinMat, 1.0);
   fpLeftHand.position.z = -0.17;
-  const fpLeftGlove = new THREE.Mesh(fpGloveGeo, gloveMat);
-  fpLeftGlove.position.z = -0.11;
+  const fpLeftGlove = new THREE.Group();
+  const fpLeftGloveSleeve = new THREE.Mesh(fpGloveCuffGeo, gloveMat);
+  fpLeftGloveSleeve.position.z = -0.095;
+  const fpLeftGloveHand = buildFpSculptedHand(-1, fpLeatherProtectorMat, 1.15);
+  fpLeftGloveHand.position.z = -0.175;
+  fpLeftGlove.add(fpLeftGloveSleeve, fpLeftGloveHand);
   fpLeftGlove.visible = false;
-  fpLeftPivot.add(fpLeftForearm, fpLeftHand, fpLeftGlove);
+  fpLeftPivot.add(fpLeftForearm, fpLeftCuff, fpLeftHand, fpLeftGlove);
 
   const fpRightPivot = new THREE.Group();
   fpRightPivot.position.set(0.27, -0.32, -0.44);
   const fpRightForearm = new THREE.Mesh(fpForearmGeo, coverallMat);
-  const fpRightHand = new THREE.Mesh(fpHandGeo, skinMat);
+  const fpRightCuff = new THREE.Mesh(fpCuffGeo, coverallMat);
+  fpRightCuff.position.z = -0.135;
+  const fpRightHand = buildFpSculptedHand(1, skinMat, 1.0);
   fpRightHand.position.z = -0.17;
-  const fpRightGlove = new THREE.Mesh(fpGloveGeo, gloveMat);
-  fpRightGlove.position.z = -0.11;
+  const fpRightGlove = new THREE.Group();
+  const fpRightGloveSleeve = new THREE.Mesh(fpGloveCuffGeo, gloveMat);
+  fpRightGloveSleeve.position.z = -0.095;
+  const fpRightGloveHand = buildFpSculptedHand(1, fpLeatherProtectorMat, 1.15);
+  fpRightGloveHand.position.z = -0.175;
+  fpRightGlove.add(fpRightGloveSleeve, fpRightGloveHand);
   fpRightGlove.visible = false;
   const fpToolSocket = new THREE.Group();
   fpToolSocket.position.set(0, 0.01, -0.19);
   fpToolSocket.rotation.y = Math.PI;
   const fpFingerTip = addTipAnchor(fpToolSocket, 0.02);
-  fpRightPivot.add(fpRightForearm, fpRightHand, fpRightGlove, fpToolSocket);
+  fpRightPivot.add(fpRightForearm, fpRightCuff, fpRightHand, fpRightGlove, fpToolSocket);
 
   const firstPersonTools = createToolProps();
   Object.values(firstPersonTools).forEach((t) => fpToolSocket.add(t));
@@ -648,17 +753,17 @@ export function createEngineerCharacter({ autoLoadGlb = true } = {}) {
     fpRightHand.visible = !gloves;
 
     if (rigState) {
-      rigState.rigArcCoat.visible = suit;
-      rigState.rigLeftSleeve.visible = suit;
-      rigState.rigRightSleeve.visible = suit;
-      rigState.rigArcHood.visible = suit;
-      rigState.rigHardHat.visible = !suit;
-      rigState.rigLeftGlove.visible = gloves;
-      rigState.rigRightGlove.visible = gloves;
-      rigState.rigLeftBareHand.visible = !gloves;
-      rigState.rigRightBareHand.visible = !gloves;
-      rigState.rigLeftSole.visible = boots;
-      rigState.rigRightSole.visible = boots;
+      if (rigState.rigArcCoat) rigState.rigArcCoat.visible = suit;
+      if (rigState.rigLeftSleeve) rigState.rigLeftSleeve.visible = suit;
+      if (rigState.rigRightSleeve) rigState.rigRightSleeve.visible = suit;
+      if (rigState.rigArcHood) rigState.rigArcHood.visible = suit;
+      if (rigState.rigHardHat) rigState.rigHardHat.visible = !suit;
+      if (rigState.rigLeftGlove) rigState.rigLeftGlove.visible = gloves;
+      if (rigState.rigRightGlove) rigState.rigRightGlove.visible = gloves;
+      if (rigState.rigLeftBareHand) rigState.rigLeftBareHand.visible = !gloves;
+      if (rigState.rigRightBareHand) rigState.rigRightBareHand.visible = !gloves;
+      if (rigState.rigLeftSole) rigState.rigLeftSole.visible = boots;
+      if (rigState.rigRightSole) rigState.rigRightSole.visible = boots;
     }
   }
 
