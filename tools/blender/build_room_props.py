@@ -917,8 +917,8 @@ def build_room_architecture(mats, col):
     b.box((0.91, 2.02, 6.582), (0.016, 0.068, 0.018), 'chrome', bevel=0.003)  # Cabinet door latch
 
     # 6. Heavy Bolted Steel & Yellow-Reflective Trolley Wheel Stops at Park & Maintenance Zones
-    # (Matches TROLLEY_PARK_POS=(3.60, -0.35) and MAINTENANCE_ZONE_POS=(-3.45, -1.55) with z - 0.50)
-    for wx, wz in ((3.60, -0.85), (-3.45, -2.05)):
+    # (Matches TROLLEY_PARK_POS=(3.72, 1.16) and MAINTENANCE_ZONE_POS=(-3.72, 1.16) with z - 0.50 = 0.66)
+    for wx, wz in ((3.72, 0.66), (-3.72, 0.66)):
         b.box((wx, 0.024, wz), (0.82, 0.046, 0.095), 'rubber_black', bevel=0.012, segs=2)
         for sx_off in (-0.24, 0.0, 0.24):
             b.box((wx + sx_off, 0.047, wz), (0.12, 0.006, 0.072), 'safety_yellow', bevel=0.002)

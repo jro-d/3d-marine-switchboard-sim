@@ -44,6 +44,7 @@ test('serves built index.html and bundled Vite assets with 200 OK', async () => 
 
     for (const glbName of [
       'engineer.glb',
+      'vcb-trolley.glb',
       'watertight-door.glb',
       'rescue-hook.glb',
       'co2-extinguisher.glb',

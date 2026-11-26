@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getSharedGltfLoader, resolvePublicAssetUrl } from '../game/gltf-loader.js';
 
 export const TROLLEY_PARK_POS = { x: 3.72, z: 1.16, yaw: Math.PI };
 export const MAINTENANCE_ZONE_POS = { x: -3.72, z: 1.16, yaw: Math.PI };
@@ -185,23 +186,27 @@ export function createVcbTrolleyVisual(MAT) {
   const brakeMat = new THREE.MeshStandardMaterial({ color: 0xb9372c, emissive: 0x330808, emissiveIntensity: 0.25, roughness: 0.45 });
   const beaconMat = new THREE.MeshStandardMaterial({ color: 0x64748b, emissive: 0x000000, emissiveIntensity: 0.0, roughness: 0.25 });
 
+  const fallbackGroup = new THREE.Group();
+  fallbackGroup.name = 'VcbTrolleyProceduralFallback';
+  root.add(fallbackGroup);
+
   // Lower rolling chassis
   const basePlate = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.044, 0.72), darkMat);
   basePlate.position.set(0, 0.145, 0);
   basePlate.castShadow = true;
   basePlate.receiveShadow = true;
-  root.add(basePlate);
+  fallbackGroup.add(basePlate);
 
   // Yellow safety bumpers along lower perimeter
   [[-0.345, 0], [0.345, 0]].forEach(([bx]) => {
     const side = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.056, 0.74), yellowMat);
     side.position.set(bx, 0.148, 0);
     side.castShadow = true;
-    root.add(side);
+    fallbackGroup.add(side);
   });
   const frontBumper = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.056, 0.024), yellowMat);
   frontBumper.position.set(0, 0.148, 0.365);
-  root.add(frontBumper);
+  fallbackGroup.add(frontBumper);
 
   // 4 heavy caster wheels + rear foot-brake pedals
   const casterWheels = [];
@@ -212,14 +217,14 @@ export function createVcbTrolleyVisual(MAT) {
     wheel.rotation.z = Math.PI / 2;
     wheel.position.set(cx, 0.056, cz);
     wheel.castShadow = true;
-    root.add(fork, wheel);
+    fallbackGroup.add(fork, wheel);
     casterWheels.push(wheel);
   });
 
   [-0.22, 0.22].forEach((bx) => {
     const pedal = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.022, 0.055), brakeMat);
     pedal.position.set(bx, 0.105, -0.36);
-    root.add(pedal);
+    fallbackGroup.add(pedal);
   });
 
   // Scissor lift uprights supporting VCB transfer bed at exact cubicle rail height (y = 0.505)
@@ -228,25 +233,25 @@ export function createVcbTrolleyVisual(MAT) {
       const col = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.34, 0.036), yellowMat);
       col.position.set(ux, 0.33, uz);
       col.castShadow = true;
-      root.add(col);
+      fallbackGroup.add(col);
     });
     const diag = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.032, 0.56), darkMat);
     diag.position.set(ux, 0.33, 0);
     diag.rotation.x = 0.52;
-    root.add(diag);
+    fallbackGroup.add(diag);
   });
 
   // Upper VCB carriage bed & twin precision guide rails matching hv-bay RL (x = ±0.27, y = 0.505)
   const bedFrame = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.024, 0.72), darkMat);
   bedFrame.position.set(0, 0.486, 0.01);
   bedFrame.receiveShadow = true;
-  root.add(bedFrame);
+  fallbackGroup.add(bedFrame);
 
   [-0.27, 0.27].forEach((rx) => {
     const rail = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.026, 0.78), railMat);
     rail.position.set(rx, 0.506, 0.03);
     rail.castShadow = true;
-    root.add(rail);
+    fallbackGroup.add(rail);
   });
 
   // Front mechanical rail-latching hooks (+Z faces switchboard cubicle sill)
@@ -259,7 +264,7 @@ export function createVcbTrolleyVisual(MAT) {
     const claw = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.044, 0.022), darkMat);
     claw.position.set(0, -0.022, 0.070);
     hookPivot.add(arm, claw);
-    root.add(hookPivot);
+    fallbackGroup.add(hookPivot);
     latchHooks.push(hookPivot);
   });
 
@@ -273,13 +278,59 @@ export function createVcbTrolleyVisual(MAT) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.84, 12), yellowMat);
     post.position.set(px, 0.55, -0.37);
     post.castShadow = true;
-    root.add(post);
+    fallbackGroup.add(post);
   });
   const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.64, 14), darkMat);
   handleBar.rotation.z = Math.PI / 2;
   handleBar.position.set(0, 0.96, -0.37);
   handleBar.castShadow = true;
-  root.add(handleBar);
+  fallbackGroup.add(handleBar);
+
+  // High-poly Blender Draco VCB Trolley mount (`public/models/vcb-trolley.glb`)
+  const glbMount = new THREE.Group();
+  glbMount.name = 'VcbTrolleyGlbMount';
+  root.add(glbMount);
+
+  const glbWheels = [];
+  const glbLatchHooks = [];
+  if (typeof window !== 'undefined') {
+    const loader = getSharedGltfLoader();
+    loader.load(
+      resolvePublicAssetUrl('models/vcb-trolley.glb'),
+      (gltf) => {
+        if (!gltf?.scene) return;
+        gltf.scene.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+        glbMount.add(gltf.scene);
+        fallbackGroup.visible = false;
+
+        for (let i = 0; i < 4; i++) {
+          const w = gltf.scene.getObjectByName(`TrolleyWheel_${i}`);
+          if (w) glbWheels.push(w);
+        }
+        for (const side of ['L', 'R']) {
+          const h = gltf.scene.getObjectByName(`TrolleyLatchHook_${side}`);
+          if (h) glbLatchHooks.push(h);
+        }
+        const brakeNode = gltf.scene.getObjectByName('TrolleyBrakePedals');
+        if (brakeNode) {
+          brakeNode.traverse((child) => {
+            if (child.isMesh && child.material?.name === 'SafetyRedEnamel') {
+              child.material = brakeMat;
+            }
+          });
+        }
+      },
+      undefined,
+      () => {
+        // Keep procedural fallback active if offline/headless
+      }
+    );
+  }
 
   // Anchor where a withdrawn VCB cassette (subGroups.TC) is reparented
   const bedAnchor = new THREE.Group();
@@ -309,11 +360,16 @@ export function createVcbTrolleyVisual(MAT) {
     prevX = trolleyState.x;
     prevZ = trolleyState.z;
     if (travel > 0.0005) {
-      casterWheels.forEach((w) => { w.rotation.x += travel / 0.056; });
+      const spin = travel / 0.056;
+      casterWheels.forEach((w) => { w.rotation.x += spin; });
+      glbWheels.forEach((w) => { w.rotation.x += spin; });
     }
 
     const hookTarget = trolleyState.latchedBayId ? 0.0 : -0.48;
     latchHooks.forEach((h) => {
+      h.rotation.x += (hookTarget - h.rotation.x) * Math.min(1, dt * 12);
+    });
+    glbLatchHooks.forEach((h) => {
       h.rotation.x += (hookTarget - h.rotation.x) * Math.min(1, dt * 12);
     });
 
