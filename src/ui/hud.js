@@ -35,7 +35,7 @@ export function buildIso7010ArcSvg(size = 56) {
  * Wires the slim top bar, command rail drawers (Checklist, PPE & Tools, Megger,
  * Help), and modal dialogs (PTW/SFT, Single-Line Diagram, Interlock Manual, Notices).
  */
-export function initHud({ sim, actions, audio, onSwitchMission, onResetMission }) {
+export function initHud({ sim, actions, audio, onSwitchMission, onResetMission, onSetGraphicsQuality }) {
   const $ = (id) => document.getElementById(id);
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -590,6 +590,24 @@ export function initHud({ sim, actions, audio, onSwitchMission, onResetMission }
     window.dispatchEvent(new Event('resize'));
   });
 
+  function syncGraphicsMenu(mode) {
+    const normalized = mode === 'standard' ? 'standard' : 'high';
+    document.querySelectorAll('[data-graphics-set]').forEach((el) => {
+      el.setAttribute('aria-checked', String(el.dataset.graphicsSet === normalized));
+    });
+  }
+
+  document.querySelectorAll('[data-graphics-set]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const requested = b.dataset.graphicsSet === 'standard' ? 'standard' : 'high';
+      const applied = onSetGraphicsQuality ? onSetGraphicsQuality(requested) : requested;
+      syncGraphicsMenu(applied || requested);
+      store.set('mhv-graphics', applied || requested);
+    })
+  );
+
+  syncGraphicsMenu(store.get('mhv-graphics') || 'high');
+
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || document.querySelector('dialog[open]') || document.querySelector(':popover-open')) return;
     if (!help.classList.contains('hidden')) {
@@ -611,5 +629,6 @@ export function initHud({ sim, actions, audio, onSwitchMission, onResetMission }
     showNotice,
     openPtwModal,
     openSldModal,
+    syncGraphicsMenu,
   };
 }

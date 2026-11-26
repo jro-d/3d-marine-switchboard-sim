@@ -1,100 +1,46 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { createPbrMaterialLibrary, pbrMapProps } from '../game/materials-pbr.js';
 
-function createSeededRand(seed = 37) {
-  let s = seed;
-  return () => {
-    s = (1664525 * s + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
-
-function makeSurfaceTex(w, h, draw, repeatX = 1, repeatY = 1, maxAniso = 4) {
-  const cv = document.createElement('canvas');
-  cv.width = w;
-  cv.height = h;
-  draw(cv.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(repeatX, repeatY);
-  t.anisotropy = Math.min(maxAniso, 8);
-  return t;
+function clampRoughMult(val) {
+  return Math.max(0.45, Math.min(1.65, val));
 }
 
 export function createSwitchboardMaterials(renderer) {
   const maxAniso = renderer?.capabilities?.getMaxAnisotropy?.() || 4;
-  const rand = createSeededRand(37);
-
-  const brushedBump = makeSurfaceTex(
-    256,
-    256,
-    (c, w, h) => {
-      c.fillStyle = '#aaa';
-      c.fillRect(0, 0, w, h);
-      for (let y = 0; y < h; y++) {
-        const a = Math.floor(130 + rand() * 80);
-        c.fillStyle = `rgb(${a},${a},${a})`;
-        c.fillRect(0, y, w, 1);
-      }
-      for (let i = 0; i < 6000; i++) {
-        c.fillStyle = `rgba(40,40,40,${rand() * 0.09})`;
-        c.fillRect(rand() * w, rand() * h, rand() * 40, 1);
-      }
-    },
-    3,
-    3,
-    maxAniso
-  );
-
-  const powderBump = makeSurfaceTex(
-    256,
-    256,
-    (c, w, h) => {
-      c.fillStyle = '#808080';
-      c.fillRect(0, 0, w, h);
-      for (let i = 0; i < 9000; i++) {
-        const v = Math.floor(95 + rand() * 70);
-        c.fillStyle = `rgba(${v},${v},${v},0.55)`;
-        c.beginPath();
-        c.arc(rand() * w, rand() * h, 0.6 + rand() * 2.2, 0, Math.PI * 2);
-        c.fill();
-      }
-    },
-    6,
-    6,
-    maxAniso
-  );
-
-  const resinRough = makeSurfaceTex(
-    128,
-    128,
-    (c, w, h) => {
-      c.fillStyle = '#5a5a5a';
-      c.fillRect(0, 0, w, h);
-      for (let i = 0; i < 260; i++) {
-        const v = Math.floor(70 + rand() * 60);
-        c.fillStyle = `rgba(${v},${v},${v},0.25)`;
-        c.beginPath();
-        c.arc(rand() * w, rand() * h, 3 + rand() * 9, 0, Math.PI * 2);
-        c.fill();
-      }
-    },
-    2,
-    2,
-    maxAniso
-  );
+  const pbr = createPbrMaterialLibrary({ size: 128, maxAnisotropy: maxAniso });
 
   const std = (color, metalness, roughness, extra = {}) =>
     new THREE.MeshStandardMaterial({ color, metalness, roughness, ...extra });
   const phys = (color, metalness, roughness, extra = {}) =>
     new THREE.MeshPhysicalMaterial({ color, metalness, roughness, ...extra });
   const powder = (color, roughness = 0.5, metalness = 0.22) =>
-    std(color, metalness, roughness, { bumpMap: powderBump, bumpScale: 0.0035 });
+    std(color, metalness, roughness, {
+      ...pbrMapProps(pbr.powderCoat, {
+        normalScale: 0.34,
+        roughnessMultiplier: clampRoughMult(roughness / 0.44),
+      }),
+      envMapIntensity: 1.08,
+    });
   const brushedMetal = (color, metalness = 0.84, roughness = 0.32) =>
-    std(color, metalness, roughness, { bumpMap: brushedBump, bumpScale: 0.004 });
+    std(color, metalness, roughness, {
+      ...pbrMapProps(pbr.brushedSteel, {
+        normalScale: 0.42,
+        roughnessMultiplier: clampRoughMult(roughness / 0.29),
+      }),
+      envMapIntensity: 1.24,
+    });
   const castResin = (color, roughness = 0.28) =>
-    phys(color, 0.05, roughness, { clearcoat: 0.65, clearcoatRoughness: 0.16, roughnessMap: resinRough });
+    phys(color, 0.05, roughness, {
+      clearcoat: 0.72,
+      clearcoatRoughness: 0.14,
+      ...pbrMapProps(pbr.castResin, {
+        normalScale: 0.22,
+        roughnessMultiplier: clampRoughMult(roughness / 0.26),
+      }),
+      envMapIntensity: 1.15,
+    });
 
   return {
     steelPanel: powder(0xb9bec1, 0.44, 0.34),
@@ -103,29 +49,38 @@ export function createSwitchboardMaterials(renderer) {
     galvSteel: brushedMetal(0xa9ada6, 0.86, 0.33),
     carriageSteel: brushedMetal(0x8e979b, 0.70, 0.38),
     skidSteel: powder(0x3d4850, 0.48, 0.42),
-    rubberMount: std(0x1f2427, 0.04, 0.78),
+    rubberMount: std(0x1f2427, 0.04, 0.78, pbrMapProps(pbr.rubberEsd, { normalScale: 0.42, roughnessMultiplier: 1.0 })),
     darkConsole: powder(0x22292d, 0.48, 0.30),
     iedCase: powder(0x3a444b, 0.40, 0.40),
     dinBlock: std(0xd9d6cc, 0.02, 0.58),
     epoxyPole: castResin(0x6a2216, 0.27),
     ctResin: castResin(0x5c2015, 0.30),
     arresterSilicone: phys(0x6e7a84, 0.02, 0.46, { clearcoat: 0.3, clearcoatRoughness: 0.3 }),
-    aluminaCeramic: phys(0xebe7dc, 0.03, 0.22, { clearcoat: 0.6, clearcoatRoughness: 0.15 }),
-    copper: std(0xc77d47, 0.84, 0.31, { envMapIntensity: 1.35 }),
-    silverContact: std(0xcfd5d8, 0.92, 0.2),
-    brass: std(0xbe9342, 0.80, 0.28),
+    aluminaCeramic: phys(0xebe7dc, 0.03, 0.22, { clearcoat: 0.65, clearcoatRoughness: 0.14 }),
+    copper: std(0xc77d47, 0.86, 0.31, {
+      ...pbrMapProps(pbr.copperBus, { normalScale: 0.30, roughnessMultiplier: 1.15 }),
+      envMapIntensity: 1.38,
+    }),
+    silverContact: std(0xcfd5d8, 0.92, 0.2, {
+      ...pbrMapProps(pbr.brushedSteel, { normalScale: 0.24, roughnessMultiplier: 0.72 }),
+      envMapIntensity: 1.35,
+    }),
+    brass: std(0xbe9342, 0.82, 0.28, {
+      ...pbrMapProps(pbr.copperBus, { normalScale: 0.26, roughnessMultiplier: 1.05 }),
+      envMapIntensity: 1.30,
+    }),
     bronzeMesh: brushedMetal(0x8f6f3a, 0.66, 0.42),
     springCloseGreen: std(0x2a6a48, 0.45, 0.34),
     springTripRed: std(0xa23a2e, 0.45, 0.34),
     phaseL1: std(0xb3271f, 0.06, 0.42),
     phaseL2: std(0xe0b31c, 0.06, 0.42),
     phaseL3: std(0x1f4f9c, 0.06, 0.42),
-    shutterRed: std(0xb8281f, 0.12, 0.38),
-    shutterYellow: std(0xe0a51f, 0.12, 0.38),
-    padlockRed: std(0xb3241b, 0.2, 0.32),
-    earthGreen: std(0x2b7a47, 0.24, 0.36),
+    shutterRed: powder(0xb8281f, 0.38, 0.14),
+    shutterYellow: powder(0xe0a51f, 0.38, 0.14),
+    padlockRed: powder(0xb3241b, 0.34, 0.22),
+    earthGreen: powder(0x2b7a47, 0.38, 0.24),
     cmeCable: std(0x7cb518, 0.1, 0.42),
-    xlpeCable: std(0x16191b, 0.04, 0.52),
+    xlpeCable: std(0x16191b, 0.04, 0.52, pbrMapProps(pbr.rubberEsd, { normalScale: 0.28, roughnessMultiplier: 0.75 })),
     stressCone: castResin(0x55190f, 0.34),
     conduitFlex: std(0x262c30, 0.2, 0.5),
     wireBlue: std(0x2f5f93, 0.06, 0.5),
@@ -135,13 +90,14 @@ export function createSwitchboardMaterials(renderer) {
       depthWrite: false,
       clearcoat: 1.0,
       clearcoatRoughness: 0.04,
+      envMapIntensity: 1.4,
     }),
     wandOrange: std(0xd95d1e, 0.12, 0.32),
     navyBase: powder(0x1d3352, 0.46, 0.30),
     earthYG: std(0x3f9b3a, 0.05, 0.48),
     earthYGStripe: std(0xe6c21c, 0.05, 0.48),
     louverBlack: powder(0x1a1f22, 0.5, 0.25),
-    gasket: std(0x15191b, 0.0, 0.8),
+    gasket: std(0x15191b, 0.0, 0.8, pbrMapProps(pbr.rubberEsd, { normalScale: 0.38, roughnessMultiplier: 1.02 })),
   };
 }
 

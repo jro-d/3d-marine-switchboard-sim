@@ -47,6 +47,17 @@ test('serves built index.html and bundled Vite assets with 200 OK', async () => 
       assert.equal(glbRes.status, 200, `Expected 200 for /models/${glbName}`);
     }
 
+    for (const dracoFile of ['draco_decoder.js', 'draco_decoder.wasm', 'draco_wasm_wrapper.js']) {
+      const dracoRes = await fetch(`${base}/draco/${dracoFile}`);
+      assert.equal(dracoRes.status, 200, `Expected 200 for /draco/${dracoFile}`);
+    }
+
+    const hdrRes = await fetch(`${base}/env/switchroom_studio.hdr`);
+    assert.equal(hdrRes.status, 200, 'Expected 200 for /env/switchroom_studio.hdr');
+    const hdrBuf = Buffer.from(await hdrRes.arrayBuffer());
+    assert.ok(hdrBuf.length > 50_000, 'switchroom_studio.hdr should be a valid non-empty HDR file');
+    assert.equal(hdrBuf.subarray(0, 10).toString('ascii'), '#?RADIANCE', 'HDR file must start with #?RADIANCE header');
+
     const missingRes = await fetch(`${base}/does-not-exist-check.txt`);
     assert.equal(missingRes.status, 404);
   } finally {

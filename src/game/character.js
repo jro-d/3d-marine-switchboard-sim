@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CCDIKSolver } from 'three/examples/jsm/animation/CCDIKSolver.js';
+import { getSharedGltfLoader, resolvePublicAssetUrl } from './gltf-loader.js';
 import {
   TOOL_TIP_OFFSETS,
   computeBodyPostureForSocket,
@@ -559,11 +559,9 @@ export function createEngineerCharacter({ autoLoadGlb = true } = {}) {
   }
 
   if (autoLoadGlb && typeof window !== 'undefined') {
-    const loader = new GLTFLoader();
-    const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || './';
-    const prefix = baseUrl.replace(/\/?$/, '/');
+    const loader = getSharedGltfLoader();
     loader.load(
-      `${prefix}models/engineer.glb`,
+      resolvePublicAssetUrl('models/engineer.glb'),
       (gltf) => {
         attachLoadedEngineerGltf(gltf);
       },

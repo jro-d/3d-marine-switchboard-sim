@@ -1,11 +1,16 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { createAudioEngine } from './sim/audio.js';
 import { createSimState, getTopology } from './sim/state.js';
 import { createSimActions } from './sim/interlocks.js';
 import { getLotoSteps, initMission } from './sim/missions.js';
 import { buildSwitchboard } from './switchboard/switchboard.js';
 import { initSwitchroomGame } from './game/controller.js';
+import { resolvePublicAssetUrl } from './game/gltf-loader.js';
+import {
+  createPostProcessingPipeline,
+  loadSwitchroomEnvironment,
+  normalizeGraphicsQuality,
+} from './game/postprocessing.js';
 import { initHud } from './ui/hud.js';
 
 function bootstrap() {
@@ -36,9 +41,19 @@ function bootstrap() {
   renderer.toneMappingExposure = 1.05;
   canvasHost.appendChild(renderer.domElement);
 
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.65;
+  loadSwitchroomEnvironment({
+    renderer,
+    scene,
+    hdrUrl: resolvePublicAssetUrl('env/switchroom_studio.hdr'),
+    envIntensity: 0.85,
+  });
+
+  let savedGraphics = 'high';
+  try {
+    savedGraphics = normalizeGraphicsQuality(localStorage.getItem('mhv-graphics') || 'high');
+  } catch {
+    savedGraphics = 'high';
+  }
 
   const hemiLight = new THREE.HemisphereLight(0xd9e8ff, 0x1c2533, 0.72);
   scene.add(hemiLight);
@@ -70,6 +85,18 @@ function bootstrap() {
 
   let hud = null;
   let gameController = null;
+
+  const postProcessing = createPostProcessingPipeline({
+    renderer,
+    scene,
+    camera,
+    width: initW,
+    height: initH,
+    initialQuality: savedGraphics,
+    onQualityFallback: (fallbackMode) => {
+      hud?.syncGraphicsMenu?.(fallbackMode);
+    },
+  });
 
   const actions = createSimActions(sim, {
     audio,
@@ -103,7 +130,9 @@ function bootstrap() {
     audio,
     onSwitchMission: (id) => applyMission(id, false),
     onResetMission: () => applyMission(sim.mission, true),
+    onSetGraphicsQuality: (quality) => postProcessing.setQuality(quality),
   });
+  hud.syncGraphicsMenu?.(postProcessing.getQuality());
 
   gameController = initSwitchroomGame({
     scene,
@@ -132,6 +161,7 @@ function bootstrap() {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    postProcessing.setSize(w, h);
   }
 
   if (typeof ResizeObserver === 'function') {
@@ -152,7 +182,7 @@ function bootstrap() {
     const shake = switchboard.getShakeOffset(dt);
     const hasShake = Boolean(shake && (shake.x !== 0 || shake.y !== 0 || shake.z !== 0));
     if (hasShake) camera.position.add(shake);
-    renderer.render(scene, camera);
+    postProcessing.render();
     if (hasShake) camera.position.sub(shake);
   }
   requestAnimationFrame(animate);
