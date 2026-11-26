@@ -112,6 +112,7 @@ function bootstrap() {
     stageWrap,
     switchboardMeshes: switchboard.allRegisteredMeshes,
     interactiveMeshes: switchboard.interactiveMeshes,
+    trolleyHitMesh: switchboard.trolleyHitMesh,
     getControlSocket: switchboard.getControlSocket,
     getSim: () => sim,
     getTopology: () => getTopology(sim),

@@ -28,6 +28,16 @@ test('proveTesterOnUnit sets HV_TESTER and interactTerminal probes L1-L3 cleanly
   assert.equal(sim.activeTool, 'HV_TESTER');
   assert.equal(sim.ptp.state, 1);
 
+  // Probing is blocked while VCB cassette still occupies the compartment
+  actions.interactTerminal('BT-M1', 'L1');
+  assert.equal(sim.ptp.phasesTested.L1, false);
+
+  // Latch VCB trolley & withdraw cassette before proving L1-L3
+  actions.latchTrolley('BT-M1');
+  actions.withdrawVcbToTrolley('BT-M1');
+  actions.unlatchTrolley();
+  actions.releaseTrolley();
+
   actions.interactTerminal('BT-M1', 'L1');
   actions.interactTerminal('BT-M1', 'L2');
   // Simulate defensive transition if VOLTAGE_TESTER was ever set externally
@@ -45,6 +55,16 @@ test('proveTesterOnUnit sets HV_TESTER and interactTerminal probes L1-L3 cleanly
   actions.issuePTW();
   const steps = getLotoSteps(sim);
   assert.equal(steps.every((s) => s.done), true);
+});
+
+test('Missions 3 and 4 start with BT-M1 VCB withdrawn on the trolley at the Maintenance Bay', () => {
+  const sim = createSimState();
+  for (const mId of [3, 4]) {
+    initMission(sim, mId);
+    assert.equal(sim.cubicles['BT-M1'].vcbExtracted, true);
+    assert.equal(sim.trolley.state, 'MAINTENANCE_PARKED');
+    assert.equal(sim.trolley.carriedCubId, 'BT-M1');
+  }
 });
 
 test('getLotoSteps omits one-click actionFn macros across Missions 1-4', () => {

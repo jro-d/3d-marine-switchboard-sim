@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { STATIONS } from './navigation.js';
+import {
+  TROLLEY_PARK_POS,
+  MAINTENANCE_ZONE_POS,
+  TROLLEY_ALIGN_Z,
+  findAlignableBay,
+} from '../switchboard/trolley.js';
 
 function makeCanvasTexture(w, h, draw, repeatX = 1, repeatY = 1, maxAniso = 4) {
   const cv = document.createElement('canvas');
@@ -418,6 +424,58 @@ export function createSwitchroom(renderer) {
     clickProxies.push(bayProxy);
   }
 
+  // Dedicated Trolley Park Bay (Starboard-Forward) & VCB Maintenance Bay (Port-Forward)
+  const trolleyParkDecal = makeFloorDecal('TROLLEY', '#d4a024');
+  trolleyParkDecal.scale.set(1.25, 1.25, 1);
+  trolleyParkDecal.position.set(TROLLEY_PARK_POS.x, 0.008, TROLLEY_PARK_POS.z);
+  root.add(trolleyParkDecal);
+
+  const maintBayDecal = makeFloorDecal('VCB MAINT', '#22c55e');
+  maintBayDecal.scale.set(1.35, 1.35, 1);
+  maintBayDecal.position.set(MAINTENANCE_ZONE_POS.x, 0.008, MAINTENANCE_ZONE_POS.z);
+  root.add(maintBayDecal);
+
+  // Rubber wheel-stop bars & bulkhead placard for the VCB Maintenance Bay
+  const wheelStopGeo = new THREE.BoxGeometry(0.78, 0.036, 0.065);
+  const wheelStopMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, roughness: 0.85, metalness: 0.08 });
+  const parkStop = new THREE.Mesh(wheelStopGeo, wheelStopMat);
+  parkStop.position.set(TROLLEY_PARK_POS.x, 0.018, TROLLEY_PARK_POS.z - 0.50);
+  const maintStop = new THREE.Mesh(wheelStopGeo, wheelStopMat);
+  maintStop.position.set(MAINTENANCE_ZONE_POS.x, 0.018, MAINTENANCE_ZONE_POS.z - 0.50);
+  root.add(parkStop, maintStop);
+
+  const maintSign = makeSignMesh(1.48, 0.30, 'VCB MAINTENANCE BAY', 'WITHDRAWN 6.6 kV BREAKER INSPECTION ZONE', '#22c55e');
+  maintSign.position.set(MAINTENANCE_ZONE_POS.x, 2.24, -1.19);
+  root.add(maintSign);
+
+  const maintProxy = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, 1.1), proxyMat);
+  maintProxy.position.set(MAINTENANCE_ZONE_POS.x, 0.8, MAINTENANCE_ZONE_POS.z);
+  maintProxy.userData.stationId = 'station:vcb-bench';
+  root.add(maintProxy);
+  clickProxies.push(maintProxy);
+
+  // Dynamic green floor guide rail box shown when pushing trolley near an open HV bay
+  const alignGuideGroup = new THREE.Group();
+  const alignMat = new THREE.MeshBasicMaterial({
+    color: 0x22c55e,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.72,
+    depthWrite: false,
+  });
+  const alignFrameL = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.76), alignMat);
+  alignFrameL.rotation.x = -Math.PI / 2;
+  alignFrameL.position.set(-0.34, 0.016, 0);
+  const alignFrameR = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.76), alignMat);
+  alignFrameR.rotation.x = -Math.PI / 2;
+  alignFrameR.position.set(0.34, 0.016, 0);
+  const alignFrameF = new THREE.Mesh(new THREE.PlaneGeometry(0.73, 0.05), alignMat);
+  alignFrameF.rotation.x = -Math.PI / 2;
+  alignFrameF.position.set(0, 0.016, -0.36);
+  alignGuideGroup.add(alignFrameL, alignFrameR, alignFrameF);
+  alignGuideGroup.visible = false;
+  root.add(alignGuideGroup);
+
   const waypointGroup = new THREE.Group();
   const wpOuter = new THREE.Mesh(
     new THREE.RingGeometry(0.36, 0.44, 32),
@@ -473,13 +531,26 @@ export function createSwitchroom(renderer) {
     const showGuide = sim.mode !== 'EXAM' && Boolean(recommendedStationId);
     waypointGroup.visible = showGuide;
     if (showGuide) {
-      const targetSt = STATIONS.find((s) => s.id === recommendedStationId);
-      if (targetSt) {
-        waypointGroup.position.x += (targetSt.anchor.x - waypointGroup.position.x) * Math.min(1, dt * 8);
-        waypointGroup.position.z += (targetSt.anchor.z - waypointGroup.position.z) * Math.min(1, dt * 8);
+      let targetAnchor = null;
+      if (recommendedStationId === 'station:trolley' && sim.trolley) {
+        targetAnchor = { x: sim.trolley.x, z: sim.trolley.z };
+      } else {
+        const targetSt = STATIONS.find((s) => s.id === recommendedStationId);
+        if (targetSt) targetAnchor = targetSt.anchor;
+      }
+      if (targetAnchor) {
+        waypointGroup.position.x += (targetAnchor.x - waypointGroup.position.x) * Math.min(1, dt * 8);
+        waypointGroup.position.z += (targetAnchor.z - waypointGroup.position.z) * Math.min(1, dt * 8);
         const s = 1 + Math.sin(elapsed * 3.5) * 0.08;
         wpOuter.scale.setScalar(s);
       }
+    }
+
+    const alignCandidate = sim.trolley?.state === 'PUSHING' ? findAlignableBay(sim.trolley, sim) : null;
+    alignGuideGroup.visible = Boolean(alignCandidate);
+    if (alignCandidate) {
+      alignGuideGroup.position.set(alignCandidate.bayX, 0, TROLLEY_ALIGN_Z);
+      alignMat.opacity = 0.55 + Math.sin(elapsed * 6) * 0.25;
     }
 
     if (walkMarkerTimer > 0) {

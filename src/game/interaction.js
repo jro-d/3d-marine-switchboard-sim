@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const INTERIOR_CONTROLS = new Set(['shutterPadlock']);
+const CASSETTE_CONTROLS = new Set(['tripBtn', 'closeBtn', 'rackPort', 'rackingPadlock', 'castellVcb']);
 
 function esc(str) {
   return String(str).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -10,6 +11,9 @@ export function isControlAccessible(meta, sim) {
   if (!meta || !meta.cubId || !sim || !sim.cubicles) return false;
   const cub = sim.cubicles[meta.cubId];
   if (!cub) return false;
+  if (CASSETTE_CONTROLS.has(meta.controlId) && cub.vcbExtracted) {
+    return false;
+  }
   if (meta.terminalId || INTERIOR_CONTROLS.has(meta.controlId)) {
     return Boolean(cub.doorOpen);
   }
@@ -25,13 +29,18 @@ export function resolveControlInteraction(meta, sim, _topo = {}) {
   if (meta.terminalId) {
     const phase = meta.terminalId;
     const isCmeMode = sim.activeTool === 'PORTABLE_EARTH' || phase === 'PE';
+    const needsWithdrawal = Boolean(cub.isHV && !cub.vcbExtracted);
     if (isCmeMode) {
       const clamped = phase === 'PE' ? Boolean(cub.cme?.pe) : Boolean(cub.cme?.[phase]);
       return {
         title: `${bayLabel} · ${phase} Earth Stud`,
-        subtitle: clamped ? 'CME ground clamp attached' : 'No CME clamp attached',
+        subtitle: needsWithdrawal
+          ? 'Withdraw VCB onto Trolley first for clear access'
+          : clamped
+            ? 'CME ground clamp attached'
+            : 'No CME clamp attached',
         actionLabel: clamped ? `Click to remove ${phase} CME clamp` : `Click to clamp ${phase} CME lead`,
-        statusTone: clamped ? 'safe' : 'warn',
+        statusTone: needsWithdrawal ? 'warn' : clamped ? 'safe' : 'warn',
         socketId: phase,
         action: {
           id: `cme_${phase}`,
@@ -52,13 +61,15 @@ export function resolveControlInteraction(meta, sim, _topo = {}) {
     const provedReady = (sim.ptp?.state || 0) >= 1;
     return {
       title: `${bayLabel} · Phase ${phase}`,
-      subtitle: tested
-        ? 'Verified 0.0 V Dead (Proved)'
-        : provedReady
-          ? '6.6 kV Wand proved — ready to probe'
-          : 'Prove 6.6 kV Wand at Test Bench first',
+      subtitle: needsWithdrawal
+        ? 'Withdraw VCB onto Trolley first for clear access'
+        : tested
+          ? 'Verified 0.0 V Dead (Proved)'
+          : provedReady
+            ? '6.6 kV Wand proved — ready to probe'
+            : 'Prove 6.6 kV Wand at Test Bench first',
       actionLabel: tested ? `Re-probe ${phase} with 6.6 kV Wand` : `Click to probe ${phase} with 6.6 kV Wand`,
-      statusTone: tested ? 'safe' : provedReady ? 'accent' : 'warn',
+      statusTone: needsWithdrawal ? 'warn' : tested ? 'safe' : provedReady ? 'accent' : 'warn',
       socketId: phase,
       action: {
         id: `probe_${phase}`,

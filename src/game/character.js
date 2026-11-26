@@ -350,7 +350,7 @@ export function createEngineerCharacter() {
     fpGroup.visible = isFirst;
   }
 
-  function updatePose({ speed, walkCycle, elapsed, anim }) {
+  function updatePose({ speed, walkCycle, elapsed, anim, pushingTrolley = false }) {
     hips.position.y = 0.90;
     torso.rotation.set(0, 0, 0);
     headGroup.rotation.set(0, 0, 0);
@@ -478,6 +478,31 @@ export function createEngineerCharacter() {
     }
 
     const moveBlend = Math.min(1, speed / 1.6);
+    if (pushingTrolley) {
+      if (moveBlend > 0.04) {
+        const stride = Math.sin(walkCycle);
+        const liftL = Math.max(0, Math.cos(walkCycle));
+        const liftR = Math.max(0, -Math.cos(walkCycle));
+        hips.position.y = 0.89 + Math.abs(Math.sin(walkCycle)) * 0.022 * moveBlend;
+        leftLeg.hipPivot.rotation.x = stride * 0.48 * moveBlend;
+        leftLeg.kneePivot.rotation.x = liftL * 0.46 * moveBlend;
+        rightLeg.hipPivot.rotation.x = -stride * 0.48 * moveBlend;
+        rightLeg.kneePivot.rotation.x = liftR * 0.46 * moveBlend;
+      }
+      torso.rotation.x = 0.14 + 0.06 * moveBlend;
+      leftArm.shoulder.rotation.set(-1.12, 0.08, 0.06);
+      leftArm.elbow.rotation.set(-0.32, 0, 0);
+      rightArm.shoulder.rotation.set(-1.12, -0.08, -0.06);
+      rightArm.elbow.rotation.set(-0.32, 0, 0);
+
+      const bob = Math.sin(walkCycle * 2) * 0.01 * moveBlend;
+      fpLeftPivot.position.set(-0.22, -0.22 + bob, -0.48);
+      fpLeftPivot.rotation.set(0.18, -0.06, 0);
+      fpRightPivot.position.set(0.22, -0.22 - bob, -0.48);
+      fpRightPivot.rotation.set(0.18, 0.06, 0);
+      return;
+    }
+
     if (moveBlend > 0.04) {
       const stride = Math.sin(walkCycle);
       const liftL = Math.max(0, Math.cos(walkCycle));

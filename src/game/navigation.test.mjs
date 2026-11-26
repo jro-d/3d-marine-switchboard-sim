@@ -21,12 +21,13 @@ function makeBaseSim(missionId = 1) {
     megger: { connectedCubicle: null, tested: false, windingChargeVolts: 0, dischargedProperly: false },
     ptw: { active: false, cancelled: false, targetCubicle: 'BT-M1' },
     sft: { active: false, cancelledAfterTest: false },
+    trolley: { state: 'PARKED', x: 3.05, z: 1.16, yaw: Math.PI, brakeLocked: true, latchedBayId: null, carriedCubId: null, transferProgress: 0 },
     cubicles: {
-      'DG1': { id: 'DG1', isHV: true, vcbClosed: true, rackingTurns: 20, rackingPadlocked: false, castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false } },
-      'BT1': { id: 'BT1', isHV: true, vcbClosed: true, rackingTurns: 20, rackingPadlocked: false, castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false } },
-      'BT-M1': { id: 'BT-M1', isHV: true, vcbClosed: true, rackingTurns: 20, rackingPadlocked: false, castellKeyId: 'K1-BT', castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], requiredEarthKeys: ['K1-BT'], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false, removedProperly: false }, testFunctionCheckedInTestPos: false },
-      'TR1-HV': { id: 'TR1-HV', isHV: true, vcbClosed: true, rackingTurns: 20, rackingPadlocked: false, castellKeyId: 'K-HV', castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], requiredEarthKeys: ['K-HV', 'K-LV'], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false, removedProperly: false } },
-      'ACB-TR1-LV': { id: 'ACB-TR1-LV', isHV: false, vcbClosed: true, rackingTurns: 0, rackingPadlocked: false, castellKeyId: 'K-LV', castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], doorOpen: false, cme: { pe: false, L1: false, L2: false, L3: false } },
+      'DG1': { id: 'DG1', isHV: true, vcbClosed: true, rackingTurns: 20, vcbExtracted: false, rackingPadlocked: false, castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false } },
+      'BT1': { id: 'BT1', isHV: true, vcbClosed: true, rackingTurns: 20, vcbExtracted: false, rackingPadlocked: false, castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false } },
+      'BT-M1': { id: 'BT-M1', isHV: true, vcbClosed: true, rackingTurns: 20, vcbExtracted: false, rackingPadlocked: false, castellKeyId: 'K1-BT', castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], requiredEarthKeys: ['K1-BT'], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false, removedProperly: false }, testFunctionCheckedInTestPos: false },
+      'TR1-HV': { id: 'TR1-HV', isHV: true, vcbClosed: true, rackingTurns: 20, vcbExtracted: false, rackingPadlocked: false, castellKeyId: 'K-HV', castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], requiredEarthKeys: ['K-HV', 'K-LV'], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false, removedProperly: false } },
+      'ACB-TR1-LV': { id: 'ACB-TR1-LV', isHV: false, vcbClosed: true, rackingTurns: 0, vcbExtracted: false, rackingPadlocked: false, castellKeyId: 'K-LV', castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], doorOpen: false, cme: { pe: false, L1: false, L2: false, L3: false } },
     },
   };
 }
@@ -89,6 +90,11 @@ test('getRecommendedTarget tracks full Mission 01 sequence across physical stati
   assert.equal(getRecommendedTarget(sim).stationId, 'bay:BT-M1');
 
   bt.doorOpen = true;
+  assert.equal(getRecommendedTarget(sim).stationId, 'station:trolley');
+
+  bt.vcbExtracted = true;
+  sim.trolley.carriedCubId = 'BT-M1';
+  sim.trolley.state = 'MAINTENANCE_PARKED';
   bt.topShutterPadlocked = true;
   assert.equal(getRecommendedTarget(sim).stationId, 'station:test');
 
@@ -99,13 +105,14 @@ test('getRecommendedTarget tracks full Mission 01 sequence across physical stati
   assert.equal(getRecommendedTarget(sim).stationId, 'station:permit');
 });
 
-test('getStationActions provides individual L1, L2, L3 probe actions when door is open', () => {
+test('getStationActions provides individual L1, L2, L3 probe actions once VCB is withdrawn', () => {
   const sim = makeBaseSim(1);
   const bt = sim.cubicles['BT-M1'];
   bt.vcbClosed = false;
   bt.rackingTurns = 0;
   bt.earthSwitchClosed = true;
   bt.doorOpen = true;
+  bt.vcbExtracted = true;
   sim.ptp.state = 1;
 
   const actions = getStationActions('bay:BT-M1', sim);
@@ -122,4 +129,18 @@ test('getStationActions provides individual L1, L2, L3 probe actions when door i
   const actionsAfterL1 = getStationActions('bay:BT-M1', sim);
   assert.equal(actionsAfterL1.find((a) => a.id === 'probe_L1').done, true);
   assert.equal(actionsAfterL1.find((a) => a.id === 'probe_L2').primary, true);
+});
+
+test('resolveCollision respects dynamic trolley obstacle AABB when provided', () => {
+  const trolleyBox = { id: 'vcb-trolley', minX: -0.36, maxX: 0.36, minZ: 1.80, maxZ: 2.64 };
+  const blocked = resolveCollision(0, 2.2, PLAYER_RADIUS, [trolleyBox]);
+  const distFromCenter = Math.max(Math.abs(blocked.x), Math.abs(blocked.z - 2.22));
+  assert.ok(distFromCenter >= 0.36, 'Player should be pushed outside dynamic trolley AABB');
+});
+
+test('findNearestInteractable prioritizes parked VCB trolley when standing behind its push-bar', () => {
+  const sim = makeBaseSim(1);
+  // Stand at the auto-walk stop behind the starboard parked trolley push-bar
+  const found = findNearestInteractable(3.05, 1.16 + 0.85, sim);
+  assert.equal(found?.id, 'station:trolley');
 });
