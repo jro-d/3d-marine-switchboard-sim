@@ -360,6 +360,8 @@ export function buildLVBay({ bayX, MAT, SHARED_TEX, helpers }) {
     root,
     subGroups,
     sockets,
+    acbBtnClose,
+    acbBtnOpen,
     acbFlag,
     acbPadlock,
     acbKey,

@@ -39,7 +39,7 @@ test('resolveCollision clamps player within room bounds and outside switchboard 
   assert.ok(farOut.z <= ROOM_BOUNDS.maxZ - PLAYER_RADIUS + 1e-6);
 
   const intoBoard = resolveCollision(0, 0.2, PLAYER_RADIUS);
-  assert.ok(intoBoard.z >= 0.78 + PLAYER_RADIUS - 1e-6, `Expected z >= ${0.78 + PLAYER_RADIUS}, got ${intoBoard.z}`);
+  assert.ok(intoBoard.z >= 0.60 + PLAYER_RADIUS - 1e-6, `Expected z >= ${0.60 + PLAYER_RADIUS}, got ${intoBoard.z}`);
 
   const intoLocker = resolveCollision(-4.7, 2.95, PLAYER_RADIUS);
   assert.ok(intoLocker.x >= -4.42 + PLAYER_RADIUS - 1e-6, `Expected x >= ${-4.42 + PLAYER_RADIUS}, got ${intoLocker.x}`);

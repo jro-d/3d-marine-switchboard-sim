@@ -394,17 +394,73 @@ export function buildSwitchboard(scene, renderer) {
         }
       }
 
+      const mech = sim._activeMechAnim && sim._activeMechAnim.cubId === id ? sim._activeMechAnim : null;
+      const mechP = mech ? mech.progress : 0;
+
+      // Multi-stage door latch + hinge swing choreography
+      const isFrontDoorAnim = mech && mech.socketId === 'doorHandle';
+      const frontLatchTwist = isFrontDoorAnim && mechP >= 0.14 && mechP <= 0.44
+        ? Math.sin(((mechP - 0.14) / 0.30) * Math.PI) * 0.82
+        : 0;
+      if (bm.frontDoorLatch) {
+        bm.frontDoorLatch.rotation.z = frontLatchTwist;
+      }
+
       const targetDoor = cub.doorOpen ? -1.85 : 0.0;
-      bm.anim.doorAngle += (targetDoor - bm.anim.doorAngle) * 0.14;
+      if (!isFrontDoorAnim || mechP >= 0.34) {
+        bm.anim.doorAngle += (targetDoor - bm.anim.doorAngle) * 0.16;
+      }
       bm.doorHingeGroup.rotation.y = bm.anim.doorAngle;
       if (bm.lowerDoorHingeGroup) {
         bm.lowerDoorHingeGroup.rotation.y = bm.anim.doorAngle * 0.94;
       }
 
       if (bm.rearDoorHingeGroup) {
+        const isRearDoorAnim = mech && mech.socketId === 'rearDoorHandle';
+        const rearLatchTwist = isRearDoorAnim && mechP >= 0.14 && mechP <= 0.44
+          ? Math.sin(((mechP - 0.14) / 0.30) * Math.PI) * -0.82
+          : 0;
+        if (bm.rearDoorLatch) {
+          bm.rearDoorLatch.rotation.z = rearLatchTwist;
+        }
         const targetRearDoor = cub.rearDoorOpen ? 1.82 : 0.0;
-        bm.anim.rearDoorAngle += (targetRearDoor - bm.anim.rearDoorAngle) * 0.14;
+        if (!isRearDoorAnim || mechP >= 0.34) {
+          bm.anim.rearDoorAngle += (targetRearDoor - bm.anim.rearDoorAngle) * 0.16;
+        }
         bm.rearDoorHingeGroup.rotation.y = bm.anim.rearDoorAngle;
+      }
+
+      // Pushbutton depression & crank/key rotation micro-tweens
+      const closePress = mech && mech.socketId === 'closeBtn' && mechP >= 0.24 && mechP <= 0.76
+        ? Math.sin(((mechP - 0.24) / 0.52) * Math.PI) * 0.009
+        : 0;
+      const tripPress = mech && mech.socketId === 'tripBtn' && mechP >= 0.24 && mechP <= 0.76
+        ? Math.sin(((mechP - 0.24) / 0.52) * Math.PI) * 0.009
+        : 0;
+      if (bm.btnClose3D && bm.btnCloseCap) {
+        bm.btnClose3D.position.z = 0.405 - closePress;
+        bm.btnCloseCap.position.z = 0.415 - closePress;
+      }
+      if (bm.btnTrip3D && bm.btnTripCap) {
+        bm.btnTrip3D.position.z = 0.405 - tripPress;
+        bm.btnTripCap.position.z = 0.415 - tripPress;
+      }
+      if (bm.rackHex && mech && mech.socketId === 'rackPort' && mechP >= 0.20 && mechP <= 0.84) {
+        bm.rackHex.rotation.y = ((mechP - 0.20) / 0.64) * Math.PI * 6;
+      }
+      if (mech && mech.animType === 'turn_key' && mechP >= 0.26 && mechP <= 0.76) {
+        const keyTurn = Math.sin(((mechP - 0.26) / 0.50) * Math.PI) * 1.35;
+        if (mech.socketId === 'castellVcb' && bm.vcbCastellKey3D?.userData?.keyBow) {
+          bm.vcbCastellKey3D.rotation.z = keyTurn;
+        } else if (mech.socketId === 'earthKey1' && bm.earthKey1?.userData?.keyBow) {
+          bm.earthKey1.rotation.z = keyTurn;
+        } else if (mech.socketId === 'earthKey2' && bm.earthKey2?.userData?.keyBow) {
+          bm.earthKey2.rotation.z = keyTurn;
+        }
+      } else {
+        if (bm.vcbCastellKey3D) bm.vcbCastellKey3D.rotation.z = 0;
+        if (bm.earthKey1) bm.earthKey1.rotation.z = 0;
+        if (bm.earthKey2) bm.earthKey2.rotation.z = 0;
       }
 
       const targetStroke = cub.vcbClosed ? 1.0 : 0.0;
@@ -537,6 +593,20 @@ export function buildSwitchboard(scene, renderer) {
     // Sync C5 · ACB-TR1-LV
     const lvCub = sim.cubicles['ACB-TR1-LV'];
     if (lvCub && lvBm) {
+      const lvMech = sim._activeMechAnim && sim._activeMechAnim.cubId === 'ACB-TR1-LV' ? sim._activeMechAnim : null;
+      const lvP = lvMech ? lvMech.progress : 0;
+      if (lvBm.acbBtnClose) {
+        const cp = lvMech && lvMech.socketId === 'closeBtn' && lvP >= 0.24 && lvP <= 0.76
+          ? Math.sin(((lvP - 0.24) / 0.52) * Math.PI) * 0.008
+          : 0;
+        lvBm.acbBtnClose.position.z = 0.464 - cp;
+      }
+      if (lvBm.acbBtnOpen) {
+        const tp = lvMech && lvMech.socketId === 'tripBtn' && lvP >= 0.24 && lvP <= 0.76
+          ? Math.sin(((lvP - 0.24) / 0.52) * Math.PI) * 0.008
+          : 0;
+        lvBm.acbBtnOpen.position.z = 0.464 - tp;
+      }
       setMeshColor(lvBm.acbFlag, lvCub.vcbClosed ? 0xad4337 : 0x2f7450);
       lvBm.acbPadlock.visible = Boolean(lvCub.rackingPadlocked);
       lvBm.acbKey.userData.keyBow.visible = !lvCub.castellLockedOut;
@@ -565,19 +635,8 @@ export function buildSwitchboard(scene, renderer) {
       });
     }
 
-    // Sync 3D Proving Wand visual
-    const selCubObj = sim.cubicles[activeId];
-    if ((sim.activeTool === 'HV_TESTER' || sim.activeTool === 'VOLTAGE_TESTER') && selCubObj && selCubObj.isHV && selCubObj.doorOpen && selBm) {
-      wand3D.visible = true;
-      let targetTerm = selBm.termCoords.L2;
-      if (sim.lastProbedTerminal && sim.lastProbedTerminal.startsWith(`${activeId}:`)) {
-        const tKey = sim.lastProbedTerminal.split(':')[1];
-        if (selBm.termCoords[tKey]) targetTerm = selBm.termCoords[tKey];
-      }
-      wand3D.position.set(selBm.root.position.x + targetTerm.x, targetTerm.y, targetTerm.z + 0.24);
-    } else {
-      wand3D.visible = false;
-    }
+    // Keep legacy disembodied CAD wand hidden; the engineer's IK-driven proving wand contacts terminals directly
+    wand3D.visible = false;
 
     updateArcFlashVFX(dt);
   }
