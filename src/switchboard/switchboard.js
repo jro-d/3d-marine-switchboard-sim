@@ -401,6 +401,12 @@ export function buildSwitchboard(scene, renderer) {
         bm.lowerDoorHingeGroup.rotation.y = bm.anim.doorAngle * 0.94;
       }
 
+      if (bm.rearDoorHingeGroup) {
+        const targetRearDoor = cub.rearDoorOpen ? 1.82 : 0.0;
+        bm.anim.rearDoorAngle += (targetRearDoor - bm.anim.rearDoorAngle) * 0.14;
+        bm.rearDoorHingeGroup.rotation.y = bm.anim.rearDoorAngle;
+      }
+
       const targetStroke = cub.vcbClosed ? 1.0 : 0.0;
       bm.anim.contactStroke += (targetStroke - bm.anim.contactStroke) * 0.22;
       const strokeOff = (1.0 - bm.anim.contactStroke) * 0.014;

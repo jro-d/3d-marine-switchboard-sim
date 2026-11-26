@@ -312,6 +312,47 @@ export function createSimActions(sim, hooks = {}) {
     setDoorOpen(cubId, !cub.doorOpen);
   }
 
+  function setRearDoorOpen(cubId, open) {
+    const cub = sim.cubicles[cubId];
+    if (!cub) return false;
+    if (open) {
+      if (!checkPpe('Open Rear HV Inspection Panel')) return false;
+      if (cub.vcbClosed || (cub.isHV && cub.rackingTurns > 0)) {
+        triggerViolation(
+          5,
+          `Arc-Flash Hazard: Unbolted ${cub.id} Rear Cover While Energized`,
+          'Trip breaker and rack out to DISCONNECTED (0/20) before opening rear cable/bus-tie panels.',
+          true
+        );
+        return false;
+      }
+      const bt1SafeBusTie = cub.id === 'BT1' && cub.vcbExtracted && cub.topShutterPadlocked;
+      if (cub.isHV && !cub.earthSwitchClosed && !bt1SafeBusTie) {
+        triggerViolation(
+          5,
+          `Interlock Blocked: ${cub.id} Rear Compartment Not Earthed`,
+          'Close & padlock the EK6 Integral Earth Switch (or for BT1 Bus-Tie, withdraw VCB & padlock red shutter) before unbolting rear panel.',
+          false
+        );
+        return false;
+      }
+    }
+    cub.rearDoorOpen = Boolean(open);
+    audio.playClunk(95);
+    logEvent(
+      `${cub.id}: Rear cable & bus-tie inspection cover ${cub.rearDoorOpen ? 'unbolted and opened' : 'closed and bolted'}.`,
+      cub.rearDoorOpen ? 'info' : 'safe'
+    );
+    render();
+    return true;
+  }
+
+  function toggleRearDoor(cubId) {
+    const cub = sim.cubicles[cubId];
+    if (!cub) return false;
+    return setRearDoorOpen(cubId, !cub.rearDoorOpen);
+  }
+
   function toggleShutterPadlock(cubId) {
     if (!checkPpe('Padlock Red Busbar Shutter')) return;
     const cub = sim.cubicles[cubId];
@@ -636,6 +677,8 @@ export function createSimActions(sim, hooks = {}) {
     toggleSafetyKeyBox,
     setDoorOpen,
     toggleDoor3D,
+    setRearDoorOpen,
+    toggleRearDoor,
     toggleShutterPadlock,
     proveTesterOnUnit,
     interactTerminal,

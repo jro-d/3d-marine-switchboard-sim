@@ -48,11 +48,11 @@ function bootstrap() {
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(2048, 2048);
   keyLight.shadow.camera.near = 0.5;
-  keyLight.shadow.camera.far = 26;
-  keyLight.shadow.camera.left = -8;
-  keyLight.shadow.camera.right = 8;
-  keyLight.shadow.camera.top = 6;
-  keyLight.shadow.camera.bottom = -4;
+  keyLight.shadow.camera.far = 30;
+  keyLight.shadow.camera.left = -7.5;
+  keyLight.shadow.camera.right = 7.5;
+  keyLight.shadow.camera.top = 7.5;
+  keyLight.shadow.camera.bottom = -5.5;
   keyLight.shadow.bias = -0.0005;
   scene.add(keyLight);
 
@@ -60,8 +60,8 @@ function bootstrap() {
   fillLight.position.set(-5.0, 3.2, 3.0);
   scene.add(fillLight);
 
-  const rimLight = new THREE.DirectionalLight(0xffe1b8, 0.35);
-  rimLight.position.set(0, 4.0, -4.5);
+  const rimLight = new THREE.DirectionalLight(0xdbeafe, 0.62);
+  rimLight.position.set(0.5, 3.6, -4.8);
   scene.add(rimLight);
 
   const audio = createAudioEngine();

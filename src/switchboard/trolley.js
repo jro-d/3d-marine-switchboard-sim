@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
-export const TROLLEY_PARK_POS = { x: 3.05, z: 1.16, yaw: Math.PI };
-export const MAINTENANCE_ZONE_POS = { x: -3.05, z: 1.16, yaw: Math.PI };
+export const TROLLEY_PARK_POS = { x: 3.72, z: 1.16, yaw: Math.PI };
+export const MAINTENANCE_ZONE_POS = { x: -3.72, z: 1.16, yaw: Math.PI };
 export const TROLLEY_ALIGN_Z = 1.04;
 export const TROLLEY_ALIGN_DIST = 0.68;
 export const TROLLEY_PUSH_OFFSET = 0.90;

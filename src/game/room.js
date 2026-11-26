@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { STATIONS } from './navigation.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { STATIONS, BAY_X } from './navigation.js';
 import {
   TROLLEY_PARK_POS,
   MAINTENANCE_ZONE_POS,
@@ -59,7 +60,7 @@ function makeSignMesh(width, height, title, subtitle, accent = '#1f6f78') {
   return new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
 }
 
-function makeFloorDecal(label, accent = '#1f6f78') {
+function makeFloorDecal(label, accent = '#1f6f78', size = 0.86) {
   const cv = document.createElement('canvas');
   cv.width = 256;
   cv.height = 256;
@@ -72,13 +73,13 @@ function makeFloorDecal(label, accent = '#1f6f78') {
   ctx.strokeRect(18, 18, 220, 220);
   ctx.setLineDash([]);
 
-  ctx.fillStyle = 'rgba(24, 34, 44, 0.52)';
-  ctx.fillRect(28, 92, 200, 72);
+  ctx.fillStyle = 'rgba(24, 34, 44, 0.58)';
+  ctx.fillRect(22, 92, 212, 72);
   ctx.fillStyle = '#f1f5f9';
-  ctx.font = '700 28px "IBM Plex Mono", monospace';
+  ctx.font = '700 26px "IBM Plex Mono", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, 128, 128);
+  ctx.fillText(label, 128, 128, 196);
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -91,10 +92,31 @@ function makeFloorDecal(label, accent = '#1f6f78') {
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
   });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.86), mat);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = 0.008;
   return mesh;
+}
+
+function loadGlbPropInto(loader, url, parentGroup) {
+  if (!loader || typeof window === 'undefined') return;
+  loader.load(
+    url,
+    (gltf) => {
+      if (!gltf?.scene) return;
+      gltf.scene.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      parentGroup.add(gltf.scene);
+    },
+    undefined,
+    () => {
+      // Non-fatal fallback if offline/headless asset fetch is unavailable
+    }
+  );
 }
 
 export function createSwitchroom(renderer) {
@@ -104,16 +126,17 @@ export function createSwitchroom(renderer) {
 
   const clickProxies = [];
 
+  // Marine checkerplate steel deck textures (albedo + bump roughness feel)
   const deckTex = makeCanvasTexture(
     256,
     256,
     (ctx, w, h) => {
-      ctx.fillStyle = '#535e69';
+      ctx.fillStyle = '#4e5964';
       ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = '#434d57';
+      ctx.strokeStyle = '#3f4953';
       ctx.lineWidth = 3;
       ctx.strokeRect(2, 2, w - 4, h - 4);
-      ctx.fillStyle = '#626f7c';
+      ctx.fillStyle = '#606d7a';
       for (let y = 16; y < h; y += 32) {
         for (let x = 16; x < w; x += 32) {
           ctx.save();
@@ -124,8 +147,30 @@ export function createSwitchroom(renderer) {
         }
       }
     },
-    10,
-    8,
+    13,
+    12,
+    maxAniso
+  );
+
+  const deckBumpTex = makeCanvasTexture(
+    256,
+    256,
+    (ctx, w, h) => {
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#d8d8d8';
+      for (let y = 16; y < h; y += 32) {
+        for (let x = 16; x < w; x += 32) {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(((x + y) % 64 === 0 ? 1 : -1) * Math.PI * 0.25);
+          ctx.fillRect(-7, -2, 14, 4);
+          ctx.restore();
+        }
+      }
+    },
+    13,
+    12,
     maxAniso
   );
 
@@ -146,7 +191,7 @@ export function createSwitchroom(renderer) {
         ctx.fill();
       }
     },
-    14,
+    16,
     1,
     maxAniso
   );
@@ -157,100 +202,237 @@ export function createSwitchroom(renderer) {
     (ctx, w, h) => {
       ctx.fillStyle = '#dde3ea';
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#8b97a4';
+      ctx.fillStyle = '#8592a0';
       ctx.fillRect(0, h * 0.78, w, h * 0.22);
       ctx.fillStyle = '#1f6f78';
       ctx.fillRect(0, h * 0.76, w, h * 0.025);
-      ctx.strokeStyle = '#c4cdd6';
+      ctx.strokeStyle = '#c1cbd5';
       ctx.lineWidth = 2;
       ctx.strokeRect(2, 2, w - 4, h - 4);
     },
-    4,
+    5,
     1,
     maxAniso
   );
 
-  const deckMat = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.76, metalness: 0.22 });
-  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.65, metalness: 0.10 });
-  const steelDarkMat = new THREE.MeshStandardMaterial({ color: 0x333c46, roughness: 0.55, metalness: 0.55 });
-  const steelFrameMat = new THREE.MeshStandardMaterial({ color: 0x5d6875, roughness: 0.45, metalness: 0.48 });
+  const deckMat = new THREE.MeshStandardMaterial({
+    map: deckTex,
+    bumpMap: deckBumpTex,
+    bumpScale: 0.008,
+    roughness: 0.72,
+    metalness: 0.26,
+  });
+  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.62, metalness: 0.12 });
+  const steelDarkMat = new THREE.MeshStandardMaterial({ color: 0x333c46, roughness: 0.52, metalness: 0.58 });
+  const steelFrameMat = new THREE.MeshStandardMaterial({ color: 0x5d6875, roughness: 0.44, metalness: 0.52 });
+  const galvTrayMat = new THREE.MeshStandardMaterial({ color: 0x8d9aa6, roughness: 0.36, metalness: 0.74 });
+  const hvacDuctMat = new THREE.MeshStandardMaterial({ color: 0xaab4be, roughness: 0.38, metalness: 0.62 });
+  const hvCableRedMat = new THREE.MeshStandardMaterial({ color: 0x9e2a25, roughness: 0.58, metalness: 0.08 });
   const tealLockerMat = new THREE.MeshStandardMaterial({ color: 0x265c66, roughness: 0.48, metalness: 0.25 });
+  const esdGreenMat = new THREE.MeshStandardMaterial({ color: 0x1e5641, roughness: 0.62, metalness: 0.06 });
   const deskWoodMat = new THREE.MeshStandardMaterial({ color: 0x8f7a62, roughness: 0.68, metalness: 0.05 });
   const safetyYellowMat = new THREE.MeshStandardMaterial({ color: 0xd9a426, roughness: 0.42, metalness: 0.14 });
   const redBoxMat = new THREE.MeshStandardMaterial({ color: 0xb9372c, roughness: 0.42, metalness: 0.28 });
+  const greenKitMat = new THREE.MeshStandardMaterial({ color: 0x1f7a4c, roughness: 0.42, metalness: 0.20 });
 
-  const deckMesh = new THREE.Mesh(new THREE.PlaneGeometry(8.8, 7.2), deckMat);
+  // Expanded 10.4 m x 9.6 m walkable shipboard switchroom deck (x in [-5.2..5.2], z in [-2.8..6.8])
+  const ROOM_W = 10.55;
+  const ROOM_D = 9.75;
+  const ROOM_CENTER_Z = 2.0;
+  const H = 3.45;
+
+  const deckMesh = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W, ROOM_D), deckMat);
   deckMesh.rotation.x = -Math.PI / 2;
-  deckMesh.position.set(0, -0.006, 2.25);
+  deckMesh.position.set(0, -0.006, ROOM_CENTER_Z);
   deckMesh.receiveShadow = true;
   deckMesh.userData.walkFloor = true;
   root.add(deckMesh);
   clickProxies.push(deckMesh);
 
-  const hazardStrip = new THREE.Mesh(
-    new THREE.PlaneGeometry(4.9, 0.14),
-    new THREE.MeshStandardMaterial({
-      map: hazardTex,
-      roughness: 0.65,
-      metalness: 0.08,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
-    })
-  );
-  hazardStrip.rotation.x = -Math.PI / 2;
-  hazardStrip.position.set(0, 0.002, 1.32);
-  root.add(hazardStrip);
+  // Front & Rear HV Arc-Flash Boundary Strips + Corridor Safety Lines
+  const hazardMat = new THREE.MeshStandardMaterial({
+    map: hazardTex,
+    roughness: 0.65,
+    metalness: 0.08,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
+  const frontHazardStrip = new THREE.Mesh(new THREE.PlaneGeometry(5.1, 0.13), hazardMat);
+  frontHazardStrip.rotation.x = -Math.PI / 2;
+  frontHazardStrip.position.set(0, 0.002, 1.32);
 
-  const H = 3.30;
-  const wallGeoSide = new THREE.BoxGeometry(0.14, H, 7.2);
+  const rearHazardStrip = new THREE.Mesh(new THREE.PlaneGeometry(5.1, 0.13), hazardMat);
+  rearHazardStrip.rotation.x = -Math.PI / 2;
+  rearHazardStrip.position.set(0, 0.002, -1.06);
+  root.add(frontHazardStrip, rearHazardStrip);
+
+  const corridorLineMat = new THREE.MeshBasicMaterial({
+    color: 0x38bdf8,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+  });
+  for (const cx of [-2.85, 2.85]) {
+    const corrStripe = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 2.55), corridorLineMat);
+    corrStripe.rotation.x = -Math.PI / 2;
+    corrStripe.position.set(cx, 0.003, 0.05);
+    root.add(corrStripe);
+  }
+
+  // Marine Bulkhead Walls + Vertical T-Bar Stiffeners
+  const wallGeoSide = new THREE.BoxGeometry(0.14, H, ROOM_D);
   const portWall = new THREE.Mesh(wallGeoSide, wallMat);
-  portWall.position.set(-4.30, H / 2, 2.25);
+  portWall.position.set(-5.20, H / 2, ROOM_CENTER_Z);
   portWall.receiveShadow = true;
 
   const stbdWall = new THREE.Mesh(wallGeoSide, wallMat);
-  stbdWall.position.set(4.30, H / 2, 2.25);
+  stbdWall.position.set(5.20, H / 2, ROOM_CENTER_Z);
   stbdWall.receiveShadow = true;
 
-  const wallGeoFrontBack = new THREE.BoxGeometry(8.75, H, 0.14);
-  const backWall = new THREE.Mesh(wallGeoFrontBack, wallMat);
-  backWall.position.set(0, H / 2, -1.28);
-  backWall.receiveShadow = true;
+  const wallGeoFrontBack = new THREE.BoxGeometry(ROOM_W, H, 0.14);
+  const fwdWall = new THREE.Mesh(wallGeoFrontBack, wallMat);
+  fwdWall.position.set(0, H / 2, -2.80);
+  fwdWall.receiveShadow = true;
 
   const aftWall = new THREE.Mesh(wallGeoFrontBack, wallMat);
-  aftWall.position.set(0, H / 2, 5.75);
+  aftWall.position.set(0, H / 2, 6.80);
   aftWall.receiveShadow = true;
-  root.add(portWall, stbdWall, backWall, aftWall);
+  root.add(portWall, stbdWall, fwdWall, aftWall);
 
-  const mainSign = makeSignMesh(3.4, 0.42, '6.6 kV HIGH-VOLTAGE SWITCHBOARD ROOM', 'DANGER · AUTHORIZED ETO PERSONNEL ONLY · 40 CAL/CM² PPE', '#b9372c');
-  mainSign.position.set(0, 2.78, -1.19);
+  // Structural bulkhead stiffener ribs
+  const ribGeoZ = new THREE.BoxGeometry(0.08, H - 0.12, 0.08);
+  for (const sz of [-1.6, 0.4, 2.4, 4.4, 6.0]) {
+    const pRib = new THREE.Mesh(ribGeoZ, steelFrameMat);
+    pRib.position.set(-5.11, H / 2, sz);
+    const sRib = new THREE.Mesh(ribGeoZ, steelFrameMat);
+    sRib.position.set(5.11, H / 2, sz);
+    root.add(pRib, sRib);
+  }
+  for (const sx of [-3.8, -1.9, 1.9, 3.8]) {
+    const fRib = new THREE.Mesh(ribGeoZ, steelFrameMat);
+    fRib.position.set(sx, H / 2, -2.71);
+    const aRib = new THREE.Mesh(ribGeoZ, steelFrameMat);
+    aRib.position.set(sx, H / 2, 6.71);
+    root.add(fRib, aRib);
+  }
+
+  // Bulkhead Safety & Zone Signage
+  const mainSign = makeSignMesh(
+    3.6,
+    0.42,
+    '6.6 kV HIGH-VOLTAGE SWITCHBOARD ROOM',
+    'DANGER · AUTHORIZED ETO PERSONNEL ONLY · 40 CAL/CM² PPE',
+    '#b9372c'
+  );
+  mainSign.position.set(0, 2.88, -2.71);
   root.add(mainSign);
 
-  const ceilingGroup = new THREE.Group();
-  const beamGeo = new THREE.BoxGeometry(8.5, 0.12, 0.14);
-  const lampHousingGeo = new THREE.BoxGeometry(1.5, 0.06, 0.18);
-  const lampTubeMat = new THREE.MeshBasicMaterial({ color: 0xf7fbff });
-  const lampTubeGeo = new THREE.BoxGeometry(1.42, 0.025, 0.10);
+  const rearAisleSign = makeSignMesh(
+    2.65,
+    0.32,
+    'REAR BUSBAR, CT & BUS-TIE AISLE',
+    'ISOLATE & CLOSE EK6 EARTH BEFORE UNBOLTING REAR COVERS',
+    '#d4a024'
+  );
+  rearAisleSign.position.set(0, 2.34, -2.71);
+  root.add(rearAisleSign);
 
-  for (const bz of [-0.2, 1.8, 3.8, 5.1]) {
+  // Overhead Deckhead Beams, Marine LED Battens, Cable Ladder Trays & HVAC Ducting
+  const ceilingGroup = new THREE.Group();
+  const beamGeo = new THREE.BoxGeometry(10.3, 0.13, 0.14);
+  const lampHousingGeo = new THREE.BoxGeometry(1.55, 0.06, 0.18);
+  const lampTubeMat = new THREE.MeshBasicMaterial({ color: 0xf7fbff });
+  const lampTubeGeo = new THREE.BoxGeometry(1.46, 0.026, 0.10);
+
+  for (const bz of [-2.1, -0.3, 1.5, 3.5, 5.5]) {
     const beam = new THREE.Mesh(beamGeo, steelFrameMat);
     beam.position.set(0, H - 0.08, bz);
     ceilingGroup.add(beam);
   }
-  for (const lx of [-2.2, 0, 2.2]) {
-    for (const lz of [1.2, 3.6]) {
+
+  for (const lx of [-3.1, 0, 3.1]) {
+    for (const lz of [-1.75, 1.45, 4.45]) {
       const housing = new THREE.Mesh(lampHousingGeo, steelDarkMat);
-      housing.position.set(lx, H - 0.16, lz);
+      housing.position.set(lx, H - 0.17, lz);
       const tube = new THREE.Mesh(lampTubeGeo, lampTubeMat);
-      tube.position.set(lx, H - 0.19, lz);
+      tube.position.set(lx, H - 0.20, lz);
       ceilingGroup.add(housing, tube);
     }
   }
+
+  // Overhead Galvanized Cable Ladder Trays + 6.6 kV Armored XLPE Feeder Runs + Bulkhead MCTs
+  const trayGroup = new THREE.Group();
+  trayGroup.name = 'OverheadCableTrays';
+  const mainTrayY = 2.78;
+  // Longitudinal header tray above switchboard rear
+  for (const railZ of [-0.62, -0.22]) {
+    const sideRail = new THREE.Mesh(new THREE.BoxGeometry(4.40, 0.055, 0.024), galvTrayMat);
+    sideRail.position.set(0, mainTrayY, railZ);
+    trayGroup.add(sideRail);
+  }
+  for (let rx = -2.10; rx <= 2.12; rx += 0.28) {
+    const rung = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.018, 0.40), galvTrayMat);
+    rung.position.set(rx, mainTrayY - 0.018, -0.42);
+    trayGroup.add(rung);
+  }
+  // Riser ladders + armored 6.6 kV feeder cables from C1..C5 roofs up to header tray & forward MCTs
+  for (const cubId of ['DG1', 'BT1', 'BT-M1', 'TR1-HV', 'ACB-TR1-LV']) {
+    const bx = BAY_X[cubId];
+    const roofY = cubId === 'ACB-TR1-LV' ? 2.06 : 2.20;
+    const riserH = mainTrayY - roofY;
+    const glandCollar = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.05, 0.16), steelDarkMat);
+    glandCollar.position.set(bx, roofY + 0.025, -0.42);
+    trayGroup.add(glandCollar);
+
+    for (const cxOff of [-0.09, 0.0, 0.09]) {
+      const vertCable = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, riserH, 10), hvCableRedMat);
+      vertCable.position.set(bx + cxOff, roofY + riserH / 2, -0.42);
+      const runToBulkhead = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 2.34, 10), hvCableRedMat);
+      runToBulkhead.rotation.x = Math.PI / 2;
+      runToBulkhead.position.set(bx + cxOff, mainTrayY + 0.025, -1.59);
+      trayGroup.add(vertCable, runToBulkhead);
+    }
+
+    // Forward bulkhead Multi-Cable Transit (MCT) frame
+    const mctFrame = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.20, 0.08), steelDarkMat);
+    mctFrame.position.set(bx, mainTrayY + 0.02, -2.72);
+    trayGroup.add(mctFrame);
+  }
+  // Transverse bridge trays carrying feeders from switchboard to forward bulkhead MCTs
+  for (const bx of [-1.68, 0.0, 1.68]) {
+    for (const sOff of [-0.18, 0.18]) {
+      const bridgeRail = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.05, 2.32), galvTrayMat);
+      bridgeRail.position.set(bx + sOff, mainTrayY, -1.58);
+      trayGroup.add(bridgeRail);
+    }
+    for (let rz = -2.62; rz <= -0.60; rz += 0.32) {
+      const bRung = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.016, 0.022), galvTrayMat);
+      bRung.position.set(bx, mainTrayY - 0.018, rz);
+      trayGroup.add(bRung);
+    }
+  }
+  ceilingGroup.add(trayGroup);
+
+  // Overhead Galvanized HVAC Supply Ventilation Trunking + Diffuser Grilles
+  const hvacGroup = new THREE.Group();
+  hvacGroup.name = 'VentilationTrunking';
+  const mainDuct = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.24, 0.34), hvacDuctMat);
+  mainDuct.position.set(0, 3.06, 2.55);
+  hvacGroup.add(mainDuct);
+  for (const fx of [-3.6, -1.8, 0.0, 1.8, 3.6]) {
+    const flange = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.27, 0.37), steelFrameMat);
+    flange.position.set(fx, 3.06, 2.55);
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.02, 0.22), steelDarkMat);
+    grille.position.set(fx + 0.65, 2.935, 2.55);
+    hvacGroup.add(flange, grille);
+  }
+  ceilingGroup.add(hvacGroup);
   root.add(ceilingGroup);
 
-  // PPE Locker
+  // Port Bulkhead: HV PPE Locker
   const ppeGroup = new THREE.Group();
-  ppeGroup.position.set(-3.82, 0, 2.50);
+  ppeGroup.position.set(-4.82, 0, 2.95);
   ppeGroup.rotation.y = Math.PI / 2;
 
   const lockerBody = new THREE.Mesh(new THREE.BoxGeometry(1.36, 2.06, 0.62), tealLockerMat);
@@ -299,9 +481,40 @@ export function createSwitchroom(renderer) {
   ppeGroup.add(ppeSign);
   root.add(ppeGroup);
 
-  // Key Box & Tool Board
+  // Port-Forward: VCB Diagnostic & Troubleshooting Workbench + GLB Instruments
+  const vcbBenchGroup = new THREE.Group();
+  vcbBenchGroup.name = 'VCBDiagnosticWorkbench';
+  vcbBenchGroup.position.set(-4.80, 0, -0.35);
+  vcbBenchGroup.rotation.y = Math.PI / 2;
+
+  const wbTop = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.07, 0.68), steelFrameMat);
+  wbTop.position.set(0, 0.90, 0);
+  wbTop.castShadow = true;
+  wbTop.receiveShadow = true;
+  const wbEsdMat = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.012, 0.54), esdGreenMat);
+  wbEsdMat.position.set(0, 0.94, 0.02);
+  const wbShelf = new THREE.Mesh(new THREE.BoxGeometry(1.40, 0.04, 0.56), steelDarkMat);
+  wbShelf.position.set(0, 0.28, 0);
+  const wbBackboard = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.92, 0.05), steelDarkMat);
+  wbBackboard.position.set(0, 1.42, -0.30);
+  const wbSign = makeSignMesh(1.48, 0.28, 'VCB DIAGNOSTIC WORKBENCH', '100A MICRO-OHMMETER · TULIP GAUGE · VDE TORQUE', '#22c55e');
+  wbSign.position.set(0, 2.12, -0.26);
+  vcbBenchGroup.add(wbTop, wbEsdMat, wbShelf, wbBackboard, wbSign);
+  for (const lx of [-0.68, 0.68]) {
+    for (const lz of [-0.27, 0.27]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.88, 0.06), steelDarkMat);
+      leg.position.set(lx, 0.44, lz);
+      vcbBenchGroup.add(leg);
+    }
+  }
+  const wbToolsMount = new THREE.Group();
+  wbToolsMount.position.set(0, 0.946, 0.04);
+  vcbBenchGroup.add(wbToolsMount);
+  root.add(vcbBenchGroup);
+
+  // Port-Aft: Key Box & Tool Board
   const keysGroup = new THREE.Group();
-  keysGroup.position.set(-2.22, 0, 5.18);
+  keysGroup.position.set(-2.78, 0, 6.18);
   keysGroup.rotation.y = Math.PI;
 
   const keyBenchTop = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.08, 0.68), steelFrameMat);
@@ -333,9 +546,9 @@ export function createSwitchroom(renderer) {
   keysGroup.add(pegboard, keyBox, keyBoxLed, wallCrank, wallStick, keysSign);
   root.add(keysGroup);
 
-  // Proving Unit & 5 kV Megger Bench
+  // Starboard-Aft: Proving Unit & 5 kV Megger Bench
   const testGroup = new THREE.Group();
-  testGroup.position.set(2.22, 0, 5.18);
+  testGroup.position.set(2.78, 0, 6.18);
   testGroup.rotation.y = Math.PI;
 
   const testBenchTop = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.08, 0.68), steelFrameMat);
@@ -366,9 +579,9 @@ export function createSwitchroom(renderer) {
   testGroup.add(provingUnit, provingLed, benchWand, meggerCase, meggerScreen, testSign);
   root.add(testGroup);
 
-  // Permit Desk
+  // Starboard Bulkhead: Permit Desk
   const permitGroup = new THREE.Group();
-  permitGroup.position.set(3.82, 0, 2.50);
+  permitGroup.position.set(4.82, 0, 2.95);
   permitGroup.rotation.y = -Math.PI / 2;
 
   const deskTop = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.07, 0.68), deskWoodMat);
@@ -392,12 +605,65 @@ export function createSwitchroom(renderer) {
   permitGroup.add(deskTop, deskBase, ptwBinder, sftFolder, permitLampStem, permitBeacon, permitSign);
   root.add(permitGroup);
 
+  // Aft Bulkhead Entry & Emergency Safety Station (.glb Watertight Door, Rescue Hook, CO2 Extinguisher + First-Aid Kit)
+  const aftDoorMount = new THREE.Group();
+  aftDoorMount.name = 'WatertightDoorMount';
+  aftDoorMount.position.set(0, 0, 6.72);
+  aftDoorMount.rotation.y = Math.PI;
+  const doorSign = makeSignMesh(1.18, 0.22, 'WATERTIGHT BULKHEAD DOOR', 'KEEP DOGGED AT SEA · 6.6 kV HV ROOM', '#b9372c');
+  doorSign.position.set(0, 2.40, 0.02);
+  aftDoorMount.add(doorSign);
+  root.add(aftDoorMount);
+
+  const rescueHookMount = new THREE.Group();
+  rescueHookMount.name = 'RescueHookMount';
+  rescueHookMount.position.set(-1.12, 1.32, 6.71);
+  rescueHookMount.rotation.y = Math.PI;
+  const hookSign = makeSignMesh(0.62, 0.16, '45 kV RESCUE HOOK', 'EMERGENCY RELEASE', '#d4a024');
+  hookSign.position.set(0, 1.06, 0.02);
+  rescueHookMount.add(hookSign);
+  root.add(rescueHookMount);
+
+  const co2Mount = new THREE.Group();
+  co2Mount.name = 'CO2ExtinguisherMount';
+  co2Mount.position.set(1.06, 0.96, 6.71);
+  co2Mount.rotation.y = Math.PI;
+  const co2Sign = makeSignMesh(0.58, 0.16, 'CO2 FIRE POINT', 'LIVE HV SAFE', '#b9372c');
+  co2Sign.position.set(0, 0.62, 0.02);
+  co2Mount.add(co2Sign);
+  root.add(co2Mount);
+
+  const firstAidGroup = new THREE.Group();
+  firstAidGroup.position.set(1.06, 2.02, 6.70);
+  firstAidGroup.rotation.y = Math.PI;
+  const faBox = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.38, 0.14), greenKitMat);
+  faBox.castShadow = true;
+  const faCrossH = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.045, 0.012), new THREE.MeshBasicMaterial({ color: 0xf8fafc }));
+  faCrossH.position.set(0, 0, 0.072);
+  const faCrossV = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.16, 0.012), new THREE.MeshBasicMaterial({ color: 0xf8fafc }));
+  faCrossV.position.set(0, 0, 0.072);
+  firstAidGroup.add(faBox, faCrossH, faCrossV);
+  root.add(firstAidGroup);
+
+  // Load binary .glb models from public/models/
+  if (typeof window !== 'undefined') {
+    const loader = new GLTFLoader();
+    const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || './';
+    const prefix = baseUrl.replace(/\/?$/, '/');
+    loadGlbPropInto(loader, `${prefix}models/watertight-door.glb`, aftDoorMount);
+    loadGlbPropInto(loader, `${prefix}models/rescue-hook.glb`, rescueHookMount);
+    loadGlbPropInto(loader, `${prefix}models/co2-extinguisher.glb`, co2Mount);
+    loadGlbPropInto(loader, `${prefix}models/workbench-tools.glb`, wbToolsMount);
+  }
+
+  // Click proxies & painted floor decals for all stations
   const proxyMat = new THREE.MeshBasicMaterial({ visible: false });
   const stationProxySpecs = [
-    { id: 'station:ppe', pos: [-3.80, 1.15, 2.50], size: [0.85, 2.3, 1.55], decal: 'PPE', accent: '#d4a024' },
-    { id: 'station:keys', pos: [-2.22, 1.15, 5.15], size: [1.65, 2.3, 0.85], decal: 'KEYS', accent: '#1f6f78' },
-    { id: 'station:test', pos: [2.22, 1.15, 5.15], size: [1.65, 2.3, 0.85], decal: 'TEST', accent: '#d4a024' },
-    { id: 'station:permit', pos: [3.80, 1.15, 2.50], size: [0.85, 2.3, 1.55], decal: 'PTW', accent: '#1f6f78' },
+    { id: 'station:ppe', pos: [-4.80, 1.15, 2.95], size: [0.85, 2.3, 1.55], decal: 'PPE', accent: '#d4a024' },
+    { id: 'station:vcb-bench', pos: [-4.80, 1.15, -0.35], size: [0.85, 2.2, 1.60], decal: 'WORKBENCH', accent: '#22c55e' },
+    { id: 'station:keys', pos: [-2.78, 1.15, 6.15], size: [1.65, 2.3, 0.85], decal: 'KEYS', accent: '#1f6f78' },
+    { id: 'station:test', pos: [2.78, 1.15, 6.15], size: [1.65, 2.3, 0.85], decal: 'TEST', accent: '#d4a024' },
+    { id: 'station:permit', pos: [4.80, 1.15, 2.95], size: [0.85, 2.3, 1.55], decal: 'PTW', accent: '#1f6f78' },
   ];
 
   for (const spec of stationProxySpecs) {
@@ -417,11 +683,23 @@ export function createSwitchroom(renderer) {
   }
 
   for (const st of STATIONS.filter((s) => s.kind === 'bay')) {
-    const bayProxy = new THREE.Mesh(new THREE.BoxGeometry(0.80, 2.20, 0.90), proxyMat);
-    bayProxy.position.set(st.anchor.x, 1.10, 0.15);
+    const bayProxy = new THREE.Mesh(new THREE.BoxGeometry(0.80, 2.20, 0.65), proxyMat);
+    bayProxy.position.set(st.anchor.x, 1.10, 0.25);
     bayProxy.userData.stationId = st.id;
     root.add(bayProxy);
     clickProxies.push(bayProxy);
+  }
+
+  for (const st of STATIONS.filter((s) => s.kind === 'rear-bay')) {
+    const rearProxy = new THREE.Mesh(new THREE.BoxGeometry(0.80, 2.20, 0.55), proxyMat);
+    rearProxy.position.set(st.anchor.x, 1.10, -0.45);
+    rearProxy.userData.stationId = st.id;
+    root.add(rearProxy);
+    clickProxies.push(rearProxy);
+
+    const rearDecal = makeFloorDecal(st.code, '#55669a', 0.68);
+    rearDecal.position.set(st.anchor.x, 0.008, st.anchor.z);
+    root.add(rearDecal);
   }
 
   // Dedicated Trolley Park Bay (Starboard-Forward) & VCB Maintenance Bay (Port-Forward)
@@ -435,7 +713,6 @@ export function createSwitchroom(renderer) {
   maintBayDecal.position.set(MAINTENANCE_ZONE_POS.x, 0.008, MAINTENANCE_ZONE_POS.z);
   root.add(maintBayDecal);
 
-  // Rubber wheel-stop bars & bulkhead placard for the VCB Maintenance Bay
   const wheelStopGeo = new THREE.BoxGeometry(0.78, 0.036, 0.065);
   const wheelStopMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, roughness: 0.85, metalness: 0.08 });
   const parkStop = new THREE.Mesh(wheelStopGeo, wheelStopMat);
@@ -445,14 +722,8 @@ export function createSwitchroom(renderer) {
   root.add(parkStop, maintStop);
 
   const maintSign = makeSignMesh(1.48, 0.30, 'VCB MAINTENANCE BAY', 'WITHDRAWN 6.6 kV BREAKER INSPECTION ZONE', '#22c55e');
-  maintSign.position.set(MAINTENANCE_ZONE_POS.x, 2.24, -1.19);
+  maintSign.position.set(MAINTENANCE_ZONE_POS.x, 2.34, -2.71);
   root.add(maintSign);
-
-  const maintProxy = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, 1.1), proxyMat);
-  maintProxy.position.set(MAINTENANCE_ZONE_POS.x, 0.8, MAINTENANCE_ZONE_POS.z);
-  maintProxy.userData.stationId = 'station:vcb-bench';
-  root.add(maintProxy);
-  clickProxies.push(maintProxy);
 
   // Dynamic green floor guide rail box shown when pushing trolley near an open HV bay
   const alignGuideGroup = new THREE.Group();

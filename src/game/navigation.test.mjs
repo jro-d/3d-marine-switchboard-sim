@@ -4,6 +4,7 @@ import {
   ROOM_BOUNDS,
   PLAYER_RADIUS,
   STATIONS,
+  computeWalkWaypoints,
   resolveCollision,
   stepPlayerMovement,
   findNearestInteractable,
@@ -21,7 +22,7 @@ function makeBaseSim(missionId = 1) {
     megger: { connectedCubicle: null, tested: false, windingChargeVolts: 0, dischargedProperly: false },
     ptw: { active: false, cancelled: false, targetCubicle: 'BT-M1' },
     sft: { active: false, cancelledAfterTest: false },
-    trolley: { state: 'PARKED', x: 3.05, z: 1.16, yaw: Math.PI, brakeLocked: true, latchedBayId: null, carriedCubId: null, transferProgress: 0 },
+    trolley: { state: 'PARKED', x: 3.72, z: 1.16, yaw: Math.PI, brakeLocked: true, latchedBayId: null, carriedCubId: null, transferProgress: 0 },
     cubicles: {
       'DG1': { id: 'DG1', isHV: true, vcbClosed: true, rackingTurns: 20, vcbExtracted: false, rackingPadlocked: false, castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false } },
       'BT1': { id: 'BT1', isHV: true, vcbClosed: true, rackingTurns: 20, vcbExtracted: false, rackingPadlocked: false, castellLockedOut: false, earthSwitchClosed: false, earthPadlocked: false, earthKeysInserted: [], doorOpen: false, topShutterPadlocked: false, cme: { pe: false, L1: false, L2: false, L3: false } },
@@ -40,8 +41,13 @@ test('resolveCollision clamps player within room bounds and outside switchboard 
   const intoBoard = resolveCollision(0, 0.2, PLAYER_RADIUS);
   assert.ok(intoBoard.z >= 0.78 + PLAYER_RADIUS - 1e-6, `Expected z >= ${0.78 + PLAYER_RADIUS}, got ${intoBoard.z}`);
 
-  const intoLocker = resolveCollision(-3.7, 2.5, PLAYER_RADIUS);
-  assert.ok(intoLocker.x >= -3.40 + PLAYER_RADIUS - 1e-6, `Expected x >= ${-3.40 + PLAYER_RADIUS}, got ${intoLocker.x}`);
+  const intoLocker = resolveCollision(-4.7, 2.95, PLAYER_RADIUS);
+  assert.ok(intoLocker.x >= -4.42 + PLAYER_RADIUS - 1e-6, `Expected x >= ${-4.42 + PLAYER_RADIUS}, got ${intoLocker.x}`);
+
+  // Rear Bus-Tie Aisle behind switchboard is walkable
+  const inRearAisle = resolveCollision(-0.84, -1.35, PLAYER_RADIUS);
+  assert.ok(Math.abs(inRearAisle.x - (-0.84)) < 1e-6);
+  assert.ok(Math.abs(inRearAisle.z - (-1.35)) < 1e-6);
 });
 
 test('stepPlayerMovement handles camera-relative WASD and click-to-walk arrival', () => {
@@ -141,6 +147,37 @@ test('resolveCollision respects dynamic trolley obstacle AABB when provided', ()
 test('findNearestInteractable prioritizes parked VCB trolley when standing behind its push-bar', () => {
   const sim = makeBaseSim(1);
   // Stand at the auto-walk stop behind the starboard parked trolley push-bar
-  const found = findNearestInteractable(3.05, 1.16 + 0.85, sim);
+  const found = findNearestInteractable(3.72, 1.16 + 0.85, sim);
   assert.equal(found?.id, 'station:trolley');
+});
+
+test('computeWalkWaypoints routes around corridor from front room to Rear Bus-Tie Aisle', () => {
+  const pts = computeWalkWaypoints(0.0, 2.8, -0.84, -1.28, 0);
+  assert.ok(pts.length >= 3, 'Should emit intermediate corridor corners around switchboard');
+  assert.ok(Math.abs(pts[0].x) >= 2.8, 'First waypoint should step out to side corridor');
+
+  let p = {
+    x: 0.0,
+    z: 2.8,
+    yaw: Math.PI,
+    speed: 0,
+    walkCycle: 0,
+    targetPoint: pts[0],
+    waypoints: pts.slice(1),
+    isBusy: false,
+  };
+  let arrived = false;
+  for (let i = 0; i < 240; i++) {
+    p = stepPlayerMovement(p, { forward: false, backward: false, left: false, right: false }, 0.05);
+    if (p.arrived) {
+      arrived = true;
+      break;
+    }
+  }
+  assert.equal(arrived, true, 'Player should arrive at rear:BT1 without getting stuck on switchboard');
+  assert.ok(Math.hypot(p.x - (-0.84), p.z - (-1.28)) < 0.14);
+
+  const sim = makeBaseSim(1);
+  const rearActions = getStationActions('rear:BT1', sim);
+  assert.equal(rearActions[0]?.exec, 'toggleRearDoor');
 });
