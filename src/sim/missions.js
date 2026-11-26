@@ -6,10 +6,11 @@ export const MISSION_TITLES = {
   2: 'Mission 02 · Transformer Dual-End Isolation (Back-Feed Trap)',
   3: 'Mission 03 · Sanction-for-Test & 5 kV Megger / PI Test',
   4: 'Mission 04 · De-Isolation & Safe Restoration to Service',
+  5: 'Mission 05 · Bus-Tie (BT1) & VCB Troubleshooting',
 };
 
 /**
- * Pure STCW LOTO step evaluation for Missions 1–4.
+ * Pure STCW LOTO step evaluation for Missions 1–5.
  * Training mode no longer exposes one-click auto-complete macros.
  */
 export function getLotoSteps(sim) {
@@ -124,6 +125,43 @@ export function getLotoSteps(sim) {
     ];
   }
 
+  if (sim.missionId === 5) {
+    const bt1 = c['BT1'];
+    const ts = sim.troubleshooting || {};
+    return [
+      {
+        title: 'Equip Full HV PPE & Roll Air-Test Gloves',
+        desc: 'Don 40 cal/cm² suit, air-tested Class 2 gloves, and dielectric boots/mat while Port Bus A (DG1) remains live.',
+        done: isFullPPE(sim),
+      },
+      {
+        title: 'Isolate BT1, Withdraw VCB & Park at Maintenance Bay',
+        desc: 'At C2 (BT1), trip VCB [O], crank out to 0/20, padlock port, open door, latch trolley, withdraw BT1 VCB, and park at Maintenance Bay.',
+        done: (!bt1.vcbClosed && bt1.rackingTurns === 0 && bt1.rackingPadlocked && bt1.vcbExtracted && !sim.trolley?.latchedBayId && sim.trolley?.state === 'MAINTENANCE_PARKED') || Boolean(sim.ptp.completedCubicles['BT1']) || Boolean(ts.tulipReplaced),
+      },
+      {
+        title: 'Padlock Bus-A Shutter & Prove L1–L3 Dead on BT1',
+        desc: 'Padlock red live Bus-A upper shutter in C2 (BT1) and execute Prove–Test–Prove across L1, L2, L3.',
+        done: Boolean(sim.ptp.completedCubicles['BT1']) && (bt1.topShutterPadlocked || Boolean(ts.rearBoltTorqued)),
+      },
+      {
+        title: 'Diagnose & Replace Worn L2 Tulip Contact at Workbench',
+        desc: 'At VCB Maintenance Bay, run 100A DLRO Micro-Ohmmeter test (184 µΩ L2 fault) and replace faulted Phase L2 tulip cluster (22 µΩ PASS).',
+        done: Boolean(ts.contactResistanceTested && ts.tulipReplaced),
+      },
+      {
+        title: 'Inspect Rear Aisle & Torque BT1 Bus-Tie Bolt (45 N·m)',
+        desc: 'Walk to Rear C2 (BT1), unbolt rear cover, torque loose Phase L2 bus-tie M16 splice bolt from 18 N·m to 45 N·m, and re-bolt cover.',
+        done: Boolean(ts.rearBoltTorqued && !bt1.rearDoorOpen),
+      },
+      {
+        title: 'Re-Insert BT1 VCB, Function Test & Restore to SERVICE',
+        desc: 'Unlock red shutter, re-insert BT1 VCB via trolley, bolt door, remove padlock, check Close/Trip at TEST (10/20), and rack to SERVICE (20/20).',
+        done: !bt1.vcbExtracted && !sim.trolley?.latchedBayId && !bt1.doorOpen && !bt1.topShutterPadlocked && !bt1.rackingPadlocked && bt1.testFunctionCheckedInTestPos && bt1.rackingTurns === 20,
+      },
+    ];
+  }
+
   const cmeClean = !bt.cme.pe && !bt.cme.L1 && !bt.cme.L2 && !bt.cme.L3 && bt.cme.removedProperly;
   return [
     {
@@ -174,7 +212,7 @@ export function initMission(sim, id, hooks = {}) {
 
   sim.ptp = {
     state: 0,
-    targetCubicle: sim.missionId === 2 ? 'TR1-HV' : 'BT-M1',
+    targetCubicle: sim.missionId === 2 ? 'TR1-HV' : sim.missionId === 5 ? 'BT1' : 'BT-M1',
     phasesTested: { L1: false, L2: false, L3: false },
     completedCubicles: {},
   };
@@ -192,7 +230,7 @@ export function initMission(sim, id, hooks = {}) {
   sim.ptw = {
     active: false,
     cancelled: false,
-    targetCubicle: sim.missionId === 2 ? 'TR1-HV' : 'BT-M1',
+    targetCubicle: sim.missionId === 2 ? 'TR1-HV' : sim.missionId === 5 ? 'BT1' : 'BT-M1',
     signedETO: false,
     signedCompetent: false,
   };
@@ -205,6 +243,15 @@ export function initMission(sim, id, hooks = {}) {
   };
 
   sim.trolley = createTrolleyState();
+
+  sim.troubleshooting = {
+    targetCubicle: 'BT1',
+    contactResistanceTested: false,
+    contactResistanceMicroOhm: sim.missionId === 5 ? 184 : 24,
+    tulipReplaced: sim.missionId !== 5,
+    rearBoltTorqued: sim.missionId !== 5,
+    rearBoltTorqueNm: sim.missionId === 5 ? 18 : 45,
+  };
 
   if (sim.missionId === 1) {
     sim.selectedCubicle = 'BT-M1';
@@ -278,6 +325,18 @@ export function initMission(sim, id, hooks = {}) {
       transferProgress: 1,
     });
     onLog('Mission 04 loaded: Cancel PTW, remove CME leads, re-insert BT-M1 VCB via trolley & restore to SERVICE.');
+  } else if (sim.missionId === 5) {
+    sim.selectedCubicle = 'BT1';
+    const bt = sim.cubicles['BT-M1'];
+    bt.machineryRunning = false;
+    bt.vcbClosed = false;
+    bt.rackingTurns = 0;
+    const tr = sim.cubicles['TR1-HV'];
+    tr.vcbClosed = false;
+    tr.rackingTurns = 0;
+    const lv = sim.cubicles['ACB-TR1-LV'];
+    lv.vcbClosed = false;
+    onLog('Mission 05 loaded: Isolate C2 (BT1) Bus-Tie while DG1 Bus A stays live, diagnose VCB tulip & rear splice fault.');
   }
 
   onRender();

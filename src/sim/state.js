@@ -35,6 +35,7 @@ export function createCubicles() {
       topShutterPadlocked: false,
       tags: { danger: false, earth: false, sft: false },
       cme: { pe: false, L1: false, L2: false, L3: false },
+      testFunctionCheckedInTestPos: false,
     },
     'BT1': {
       id: 'BT1',
@@ -57,6 +58,7 @@ export function createCubicles() {
       topShutterPadlocked: false,
       tags: { danger: false, earth: false, sft: false },
       cme: { pe: false, L1: false, L2: false, L3: false },
+      testFunctionCheckedInTestPos: false,
     },
     'BT-M1': {
       id: 'BT-M1',
@@ -191,6 +193,15 @@ export function createSimState() {
 
     trolley: createTrolleyState(),
 
+    troubleshooting: {
+      targetCubicle: 'BT1',
+      contactResistanceTested: false,
+      contactResistanceMicroOhm: 24,
+      tulipReplaced: false,
+      rearBoltTorqued: false,
+      rearBoltTorqueNm: 45,
+    },
+
     cubicles: createCubicles(),
   };
 }
@@ -210,6 +221,8 @@ export function getTopology(sim) {
     btVolts = sim.megger.windingChargeVolts;
   }
 
+  const bt1Volts = c['BT1'].vcbClosed && c['BT1'].rackingTurns === 20 && portLive ? 6600 : 0;
+
   let trVolts = 0;
   let trBackfed = false;
   if (stbdLive && c['TR1-HV'].vcbClosed && c['TR1-HV'].rackingTurns === 20) {
@@ -228,6 +241,7 @@ export function getTopology(sim) {
     portLive,
     stbdLive,
     btVolts,
+    bt1Volts,
     trVolts,
     trBackfed,
     btEarthed: isEarthed('BT-M1'),

@@ -97,4 +97,11 @@ test('isControlAccessible disables breaker-mounted controls when VCB cassette is
   assert.ok(rearCover);
   assert.equal(rearCover.action.exec, 'toggleRearDoor');
   assert.equal(rearCover.action.arg, 'BT1');
+
+  assert.equal(isControlAccessible({ cubId: 'BT1', controlId: 'rearBusTieBolt' }, sim), false);
+  sim.cubicles['BT1'].rearDoorOpen = true;
+  assert.equal(isControlAccessible({ cubId: 'BT1', controlId: 'rearBusTieBolt' }, sim), true);
+  const boltHit = resolveControlInteraction({ cubId: 'BT1', controlId: 'rearBusTieBolt' }, sim);
+  assert.equal(boltHit.action.exec, 'torqueRearBolt');
+  assert.equal(boltHit.socketId, 'rearBusTieBolt');
 });

@@ -370,8 +370,8 @@ export function initHud({ sim, actions, audio, onSwitchMission, onResetMission }
     $('topScoreText').textContent = `${sim.score} / 100`;
     scoreBadge.className = `score-badge ${sim.score < 60 ? 'bad' : sim.score < 85 ? 'warn' : ''}`;
 
-    $('telBus').dataset.state = topo.stbdLive ? 'live' : 'safe';
-    $('topTelBus').textContent = topo.stbdLive ? '6.60 kV · 60.0 Hz' : '0.00 kV · Dead';
+    $('telBus').dataset.state = topo.portLive ? 'live' : 'safe';
+    $('topTelBus').textContent = topo.portLive ? '6.60 kV · 60.0 Hz' : '0.00 kV · Dead';
 
     const btDrawingLoad = topo.stbdLive && sim.cubicles['BT-M1'].vcbClosed && sim.cubicles['BT-M1'].rackingTurns === 20;
     $('telLoad').dataset.state = btDrawingLoad ? 'live' : 'safe';
@@ -380,8 +380,13 @@ export function initHud({ sim, actions, audio, onSwitchMission, onResetMission }
     $('telTie').dataset.state = sim.cubicles['BT1'].vcbClosed ? 'live' : 'safe';
     $('topTelTie').textContent = sim.cubicles['BT1'].vcbClosed ? 'CLOSED [I]' : 'OPEN [O]';
 
-    $('telRules').dataset.state = sim.ptw.active ? 'safe' : 'warn';
-    $('topTelRules').textContent = sim.ptw.active ? 'PTW compliant' : 'In progress';
+    const rulesOk = sim.missionId === 5
+      ? Boolean(sim.troubleshooting?.tulipReplaced && sim.troubleshooting?.rearBoltTorqued)
+      : sim.ptw.active;
+    $('telRules').dataset.state = rulesOk ? 'safe' : 'warn';
+    $('topTelRules').textContent = sim.missionId === 5
+      ? (rulesOk ? 'Faults cleared' : 'Diagnostics active')
+      : (sim.ptw.active ? 'PTW compliant' : 'In progress');
 
     // Read-only PPE / Keys / Megger drawer telemetry
     $('ppeGlovesSub').textContent = sim.ppe.gloves
@@ -530,7 +535,7 @@ export function initHud({ sim, actions, audio, onSwitchMission, onResetMission }
     btn.addEventListener('click', () => {
       document.querySelectorAll('.scenario-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      $('missionCountBadge').textContent = `0${btn.dataset.m} / 04`;
+      $('missionCountBadge').textContent = `0${btn.dataset.m} / 05`;
       $('bottomStatusScenario').innerHTML = `<strong>Mission 0${btn.dataset.m}</strong> · ${esc(btn.querySelector('span:last-child').textContent)}`;
       const m = $('missionMenu');
       if (m && m.matches(':popover-open')) m.hidePopover();

@@ -287,7 +287,8 @@ export function createSimActions(sim, hooks = {}) {
         triggerViolation(5, 'Door Interlocked: VCB In-Slot', 'Opening an energized HV compartment while VCB is in SERVICE/TEST exposes personnel to 6.6 kV arc-flash. Rack VCB to DISCONNECTED (0/20) first.', cub.vcbClosed);
         return;
       }
-      if (!cub.earthSwitchClosed && !cub.sftDoorBypass && !sim.sft.active) {
+      const bt1LockedOut = cub.id === 'BT1' && !cub.vcbClosed && cub.rackingPadlocked;
+      if (!cub.earthSwitchClosed && !cub.sftDoorBypass && !sim.sft.active && !bt1LockedOut) {
         triggerViolation(5, 'Door Interlocked: Earth Switch Open', 'Opening an unearthed 6.6 kV compartment exposes operator to lethal capacitive or back-fed voltage. Close Integral Earth Switch first.', true);
         return;
       }
@@ -368,16 +369,18 @@ export function createSimActions(sim, hooks = {}) {
     sim.activeTool = 'HV_TESTER';
     sim.lastProbedTerminal = 'PROVER';
     audio.playPiezo(true);
-    const tgt = sim.selectedCubicle === 'TR1-HV' ? 'TR1-HV' : 'BT-M1';
-    if (sim.ptp.state === 0 || sim.ptp.targetCubicle !== tgt) {
-      sim.ptp.targetCubicle = tgt;
+    const defaultTgt = sim.missionId === 2 ? 'TR1-HV' : sim.missionId === 5 ? 'BT1' : 'BT-M1';
+    const sel = sim.selectedCubicle;
+    const pickedTgt = sel === 'TR1-HV' || sel === 'BT1' || sel === 'BT-M1' ? sel : defaultTgt;
+    if (sim.ptp.state === 2 && sim.ptp.targetCubicle) {
+      sim.ptp.state = 3;
+      sim.ptp.completedCubicles[sim.ptp.targetCubicle] = true;
+      logEvent(`PTP Step 3: Wand re-proven! Prove–Test–Prove verified for ${sim.ptp.targetCubicle}.`, 'safe');
+    } else if (sim.ptp.state === 0 || sim.ptp.targetCubicle !== pickedTgt) {
+      sim.ptp.targetCubicle = pickedTgt;
       sim.ptp.state = 1;
       sim.ptp.phasesTested = { L1: false, L2: false, L3: false };
-      logEvent(`PTP Step 1: 6.6 kV wand proven on proving unit for ${tgt}. Now probe L1, L2, L3.`, 'info');
-    } else if (sim.ptp.state === 2 && sim.ptp.targetCubicle === tgt) {
-      sim.ptp.state = 3;
-      sim.ptp.completedCubicles[tgt] = true;
-      logEvent(`PTP Step 3: Wand re-proven! Prove–Test–Prove verified for ${tgt}.`, 'safe');
+      logEvent(`PTP Step 1: 6.6 kV wand proven on proving unit for ${pickedTgt}. Now probe L1, L2, L3.`, 'info');
     }
     render();
   }
@@ -387,7 +390,7 @@ export function createSimActions(sim, hooks = {}) {
     const cub = sim.cubicles[cubId];
     if (!cub) return;
     const topo = getTopology(sim);
-    const volts = cubId === 'TR1-HV' ? topo.trVolts : topo.btVolts;
+    const volts = cubId === 'TR1-HV' ? topo.trVolts : cubId === 'BT1' ? topo.bt1Volts : topo.btVolts;
     sim.lastProbedTerminal = `${cubId}:${term}`;
 
     // Accept both canonical HV_TESTER and legacy VOLTAGE_TESTER alias defensively
@@ -662,6 +665,65 @@ export function createSimActions(sim, hooks = {}) {
     return true;
   }
 
+  function runContactResistanceTest() {
+    if (!checkPpe('Run DLRO Contact Resistance Test')) return false;
+    const tgt = sim.troubleshooting?.targetCubicle || 'BT1';
+    if (!sim.trolley?.carriedCubId || sim.trolley.carriedCubId !== tgt || sim.trolley.state !== 'MAINTENANCE_PARKED') {
+      triggerViolation(5, 'VCB Must Be Parked at Maintenance Bay', `Wheel ${tgt} VCB onto the Port-Forward VCB Maintenance Bay and lock wheel brakes before DLRO testing.`);
+      return false;
+    }
+    sim.troubleshooting.contactResistanceTested = true;
+    audio.playPiezo(true);
+    if (sim.troubleshooting.tulipReplaced) {
+      sim.troubleshooting.contactResistanceMicroOhm = 22;
+      logEvent(`DLRO 100A Micro-Ohmmeter on ${tgt} VCB: L1 24 µΩ · L2 22 µΩ · L3 25 µΩ (PASS <= 60 µΩ).`, 'safe');
+    } else {
+      sim.troubleshooting.contactResistanceMicroOhm = 184;
+      logEvent(`DLRO Fault Found on ${tgt} VCB: Phase L2 tulip cluster measures 184 µΩ (spec <= 60 µΩ)! Replace worn contact.`, 'warn');
+    }
+    render();
+    return true;
+  }
+
+  function replaceVcbTulipContact() {
+    if (!checkPpe('Replace Worn Tulip Contact Cluster')) return false;
+    const tgt = sim.troubleshooting?.targetCubicle || 'BT1';
+    if (!sim.trolley?.carriedCubId || sim.trolley.carriedCubId !== tgt || sim.trolley.state !== 'MAINTENANCE_PARKED') {
+      triggerViolation(5, 'VCB Must Be Parked at Maintenance Bay', `Park ${tgt} VCB at the Maintenance Bay before servicing primary tulip fingers.`);
+      return false;
+    }
+    if (!sim.troubleshooting.contactResistanceTested) {
+      triggerViolation(5, 'Run DLRO Contact Test First', 'Perform the 100A micro-ohmmeter contact resistance test to isolate the faulted phase before replacing contacts.');
+      return false;
+    }
+    sim.troubleshooting.tulipReplaced = true;
+    sim.troubleshooting.contactResistanceMicroOhm = 22;
+    audio.playRatchet();
+    logEvent(`${tgt} VCB: Replaced oxidized L2 tulip contact cluster & re-verified 22 µΩ PASS.`, 'safe');
+    render();
+    return true;
+  }
+
+  function torqueRearBusTieBolt(cubId = 'BT1') {
+    if (!checkPpe('Torque Rear Bus-Tie Splice Bolt')) return false;
+    const cub = sim.cubicles[cubId];
+    if (!cub) return false;
+    if (!cub.rearDoorOpen) {
+      triggerViolation(5, 'Rear Inspection Cover Closed', `Unbolt and open ${cubId} rear inspection cover from the Rear Aisle first.`);
+      return false;
+    }
+    if (cubId === 'BT1' && (!cub.vcbExtracted || !cub.topShutterPadlocked)) {
+      triggerViolation(5, 'Bus-A Shutters Not Padlocked', 'Ensure BT1 VCB is withdrawn and red Bus-A shutters are padlocked before torquing bus-tie splices.');
+      return false;
+    }
+    sim.troubleshooting.rearBoltTorqued = true;
+    sim.troubleshooting.rearBoltTorqueNm = 45;
+    audio.playRatchet();
+    logEvent(`${cubId} Rear Splice Chamber: Phase L2 M16 bus-tie bolt torqued from 18 N·m to 45 N·m (torque stripe aligned).`, 'safe');
+    render();
+    return true;
+  }
+
   return {
     triggerViolation,
     checkPpe,
@@ -695,5 +757,8 @@ export function createSimActions(sim, hooks = {}) {
     unlatchTrolley,
     withdrawVcbToTrolley,
     reinsertVcbFromTrolley,
+    runContactResistanceTest,
+    replaceVcbTulipContact,
+    torqueRearBusTieBolt,
   };
 }

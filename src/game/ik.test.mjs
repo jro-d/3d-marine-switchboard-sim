@@ -57,6 +57,10 @@ test('resolveActionSocketMeta maps every switchboard action to its exact bay soc
     cubId: 'BT1',
     socketId: 'rearDoorHandle',
   });
+  assert.deepEqual(resolveActionSocketMeta({ exec: 'torqueRearBolt', arg: 'BT1' }, sim), {
+    cubId: 'BT1',
+    socketId: 'rearBusTieBolt',
+  });
 });
 
 test('rigged engineer.glb + CCDIKSolver aligns finger and tool tips within < 2.5 cm of all 3D sockets', async () => {

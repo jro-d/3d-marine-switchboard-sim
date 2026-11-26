@@ -181,3 +181,51 @@ test('computeWalkWaypoints routes around corridor from front room to Rear Bus-Ti
   const rearActions = getStationActions('rear:BT1', sim);
   assert.equal(rearActions[0]?.exec, 'toggleRearDoor');
 });
+
+test('getRecommendedTarget and getStationActions guide Mission 05 workbench and rear aisle troubleshooting', () => {
+  const sim = makeBaseSim(5);
+  sim.ppe = { suit: true, glovesAirTested: true, gloves: true, bootsMat: true };
+  sim.ptp.targetCubicle = 'BT1';
+  sim.troubleshooting = {
+    targetCubicle: 'BT1',
+    contactResistanceTested: false,
+    contactResistanceMicroOhm: 184,
+    tulipReplaced: false,
+    rearBoltTorqued: false,
+    rearBoltTorqueNm: 18,
+  };
+
+  assert.equal(getRecommendedTarget(sim).stationId, 'bay:BT1');
+
+  const bt1 = sim.cubicles['BT1'];
+  bt1.vcbClosed = false;
+  bt1.rackingTurns = 0;
+  bt1.rackingPadlocked = true;
+  bt1.doorOpen = true;
+  bt1.vcbExtracted = true;
+  bt1.topShutterPadlocked = true;
+  sim.ptp.completedCubicles['BT1'] = true;
+  sim.trolley = {
+    state: 'MAINTENANCE_PARKED',
+    x: -3.72,
+    z: 1.16,
+    yaw: Math.PI,
+    brakeLocked: true,
+    latchedBayId: null,
+    carriedCubId: 'BT1',
+    transferProgress: 1,
+  };
+
+  assert.equal(getRecommendedTarget(sim).stationId, 'station:vcb-bench');
+  const benchActions = getStationActions('station:vcb-bench', sim);
+  assert.equal(benchActions.some((a) => a.exec === 'runContactTest'), true);
+  assert.equal(benchActions.some((a) => a.exec === 'replaceTulip'), true);
+
+  sim.troubleshooting.contactResistanceTested = true;
+  sim.troubleshooting.tulipReplaced = true;
+  assert.equal(getRecommendedTarget(sim).stationId, 'rear:BT1');
+
+  bt1.rearDoorOpen = true;
+  const rearOpenActions = getStationActions('rear:BT1', sim);
+  assert.equal(rearOpenActions[0]?.exec, 'torqueRearBolt');
+});

@@ -14,6 +14,9 @@ export function isControlAccessible(meta, sim) {
   if (CASSETTE_CONTROLS.has(meta.controlId) && cub.vcbExtracted) {
     return false;
   }
+  if (meta.controlId === 'rearBusTieBolt') {
+    return Boolean(cub.rearDoorOpen);
+  }
   if (meta.terminalId || INTERIOR_CONTROLS.has(meta.controlId)) {
     return Boolean(cub.doorOpen);
   }
@@ -251,6 +254,26 @@ export function resolveControlInteraction(meta, sim, _topo = {}) {
           arg: cubId,
         },
       };
+
+    case 'rearBusTieBolt': {
+      const torqued = Boolean(sim.troubleshooting?.rearBoltTorqued);
+      return {
+        title: `${bayLabel} · Phase L2 Bus-Tie M16 Splice Bolt`,
+        subtitle: torqued ? 'Torqued to 45 N·m (Witness Stripe Aligned)' : 'Under-Torqued Fault (18 N·m Found · Spec 45 N·m)',
+        actionLabel: torqued ? 'Spec Verified (45 N·m)' : 'Click to Torque M16 Bolt to 45 N·m',
+        statusTone: torqued ? 'safe' : 'warn',
+        socketId: 'rearBusTieBolt',
+        action: {
+          id: 'torque_bt1_bolt',
+          label: 'Torque Loose L2 Bus-Tie Splice Bolt to 45 N·m',
+          anim: 'rack_crank',
+          tool: 'racking_handle',
+          duration: 1.15,
+          exec: 'torqueRearBolt',
+          arg: cubId,
+        },
+      };
+    }
 
     case 'ek6Socket':
       return {
