@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { getSharedGltfLoader, resolvePublicAssetUrl } from './gltf-loader.js';
+import { createPbrMaterialLibrary, pbrMapProps } from './materials-pbr.js';
 import { STATIONS, BAY_X } from './navigation.js';
 import {
   TROLLEY_PARK_POS,
@@ -121,12 +122,13 @@ function loadGlbPropInto(loader, url, parentGroup) {
 
 export function createSwitchroom(renderer) {
   const maxAniso = renderer?.capabilities?.getMaxAnisotropy?.() || 4;
+  const pbr = createPbrMaterialLibrary({ size: 128, maxAnisotropy: maxAniso });
   const root = new THREE.Group();
   root.name = 'HVSwitchroom';
 
   const clickProxies = [];
 
-  // Marine checkerplate steel deck textures (albedo + bump roughness feel)
+  // Marine checkerplate steel deck textures (albedo + tangent-space normalMap & roughnessMap)
   const deckTex = makeCanvasTexture(
     256,
     256,
@@ -137,28 +139,6 @@ export function createSwitchroom(renderer) {
       ctx.lineWidth = 3;
       ctx.strokeRect(2, 2, w - 4, h - 4);
       ctx.fillStyle = '#606d7a';
-      for (let y = 16; y < h; y += 32) {
-        for (let x = 16; x < w; x += 32) {
-          ctx.save();
-          ctx.translate(x, y);
-          ctx.rotate(((x + y) % 64 === 0 ? 1 : -1) * Math.PI * 0.25);
-          ctx.fillRect(-7, -2, 14, 4);
-          ctx.restore();
-        }
-      }
-    },
-    13,
-    12,
-    maxAniso
-  );
-
-  const deckBumpTex = makeCanvasTexture(
-    256,
-    256,
-    (ctx, w, h) => {
-      ctx.fillStyle = '#808080';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#d8d8d8';
       for (let y = 16; y < h; y += 32) {
         for (let x = 16; x < w; x += 32) {
           ctx.save();
@@ -217,23 +197,74 @@ export function createSwitchroom(renderer) {
 
   const deckMat = new THREE.MeshStandardMaterial({
     map: deckTex,
-    bumpMap: deckBumpTex,
-    bumpScale: 0.008,
-    roughness: 0.72,
-    metalness: 0.26,
+    ...pbrMapProps(pbr.checkerplate, { normalScale: 0.92, roughnessMultiplier: 1.0 }),
+    metalness: 0.34,
+    envMapIntensity: 1.12,
   });
-  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.62, metalness: 0.12 });
-  const steelDarkMat = new THREE.MeshStandardMaterial({ color: 0x333c46, roughness: 0.52, metalness: 0.58 });
-  const steelFrameMat = new THREE.MeshStandardMaterial({ color: 0x5d6875, roughness: 0.44, metalness: 0.52 });
-  const galvTrayMat = new THREE.MeshStandardMaterial({ color: 0x8d9aa6, roughness: 0.36, metalness: 0.74 });
-  const hvacDuctMat = new THREE.MeshStandardMaterial({ color: 0xaab4be, roughness: 0.38, metalness: 0.62 });
-  const hvCableRedMat = new THREE.MeshStandardMaterial({ color: 0x9e2a25, roughness: 0.58, metalness: 0.08 });
-  const tealLockerMat = new THREE.MeshStandardMaterial({ color: 0x265c66, roughness: 0.48, metalness: 0.25 });
-  const esdGreenMat = new THREE.MeshStandardMaterial({ color: 0x1e5641, roughness: 0.62, metalness: 0.06 });
-  const deskWoodMat = new THREE.MeshStandardMaterial({ color: 0x8f7a62, roughness: 0.68, metalness: 0.05 });
-  const safetyYellowMat = new THREE.MeshStandardMaterial({ color: 0xd9a426, roughness: 0.42, metalness: 0.14 });
-  const redBoxMat = new THREE.MeshStandardMaterial({ color: 0xb9372c, roughness: 0.42, metalness: 0.28 });
-  const greenKitMat = new THREE.MeshStandardMaterial({ color: 0x1f7a4c, roughness: 0.42, metalness: 0.20 });
+  const wallMat = new THREE.MeshStandardMaterial({
+    map: wallTex,
+    ...pbrMapProps(pbr.bulkheadWall, { normalScale: 0.46, roughnessMultiplier: 1.0 }),
+    metalness: 0.14,
+  });
+  const steelDarkMat = new THREE.MeshStandardMaterial({
+    color: 0x333c46,
+    ...pbrMapProps(pbr.powderCoat, { normalScale: 0.36, roughnessMultiplier: 1.12 }),
+    metalness: 0.62,
+    envMapIntensity: 1.15,
+  });
+  const steelFrameMat = new THREE.MeshStandardMaterial({
+    color: 0x5d6875,
+    ...pbrMapProps(pbr.powderCoat, { normalScale: 0.34, roughnessMultiplier: 1.0 }),
+    metalness: 0.56,
+    envMapIntensity: 1.12,
+  });
+  const galvTrayMat = new THREE.MeshStandardMaterial({
+    color: 0x8d9aa6,
+    ...pbrMapProps(pbr.brushedSteel, { normalScale: 0.42, roughnessMultiplier: 1.18 }),
+    metalness: 0.78,
+    envMapIntensity: 1.28,
+  });
+  const hvacDuctMat = new THREE.MeshStandardMaterial({
+    color: 0xaab4be,
+    ...pbrMapProps(pbr.brushedSteel, { normalScale: 0.34, roughnessMultiplier: 1.22 }),
+    metalness: 0.66,
+    envMapIntensity: 1.18,
+  });
+  const hvCableRedMat = new THREE.MeshStandardMaterial({
+    color: 0x9e2a25,
+    ...pbrMapProps(pbr.rubberEsd, { normalScale: 0.32, roughnessMultiplier: 0.78 }),
+    metalness: 0.08,
+  });
+  const tealLockerMat = new THREE.MeshStandardMaterial({
+    color: 0x265c66,
+    ...pbrMapProps(pbr.powderCoat, { normalScale: 0.34, roughnessMultiplier: 1.04 }),
+    metalness: 0.28,
+  });
+  const esdGreenMat = new THREE.MeshStandardMaterial({
+    color: 0x1e5641,
+    ...pbrMapProps(pbr.rubberEsd, { normalScale: 0.48, roughnessMultiplier: 0.94 }),
+    metalness: 0.05,
+  });
+  const deskWoodMat = new THREE.MeshStandardMaterial({
+    color: 0x8f7a62,
+    ...pbrMapProps(pbr.laminatedWood, { normalScale: 0.40, roughnessMultiplier: 1.08 }),
+    metalness: 0.04,
+  });
+  const safetyYellowMat = new THREE.MeshStandardMaterial({
+    color: 0xd9a426,
+    ...pbrMapProps(pbr.powderCoat, { normalScale: 0.30, roughnessMultiplier: 0.94 }),
+    metalness: 0.16,
+  });
+  const redBoxMat = new THREE.MeshStandardMaterial({
+    color: 0xb9372c,
+    ...pbrMapProps(pbr.powderCoat, { normalScale: 0.32, roughnessMultiplier: 0.94 }),
+    metalness: 0.28,
+  });
+  const greenKitMat = new THREE.MeshStandardMaterial({
+    color: 0x1f7a4c,
+    ...pbrMapProps(pbr.powderCoat, { normalScale: 0.30, roughnessMultiplier: 0.94 }),
+    metalness: 0.22,
+  });
 
   // Expanded 10.4 m x 9.6 m walkable shipboard switchroom deck (x in [-5.2..5.2], z in [-2.8..6.8])
   const ROOM_W = 10.55;
@@ -647,13 +678,11 @@ export function createSwitchroom(renderer) {
 
   // Load binary .glb models from public/models/
   if (typeof window !== 'undefined') {
-    const loader = new GLTFLoader();
-    const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || './';
-    const prefix = baseUrl.replace(/\/?$/, '/');
-    loadGlbPropInto(loader, `${prefix}models/watertight-door.glb`, aftDoorMount);
-    loadGlbPropInto(loader, `${prefix}models/rescue-hook.glb`, rescueHookMount);
-    loadGlbPropInto(loader, `${prefix}models/co2-extinguisher.glb`, co2Mount);
-    loadGlbPropInto(loader, `${prefix}models/workbench-tools.glb`, wbToolsMount);
+    const loader = getSharedGltfLoader();
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/watertight-door.glb'), aftDoorMount);
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/rescue-hook.glb'), rescueHookMount);
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/co2-extinguisher.glb'), co2Mount);
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/workbench-tools.glb'), wbToolsMount);
   }
 
   // Click proxies & painted floor decals for all stations
