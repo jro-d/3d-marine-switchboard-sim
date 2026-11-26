@@ -31,8 +31,8 @@ export const BAY_X = {
 };
 
 export const OBSTACLES = [
-  // 5-bay 6.6 kV switchboard lineup footprint
-  { id: 'switchboard', minX: -2.30, maxX: 2.30, minZ: -0.72, maxZ: 0.78 },
+  // 5-bay 6.6 kV switchboard lineup footprint (steel faces z in [-0.64..+0.58])
+  { id: 'switchboard', minX: -2.30, maxX: 2.30, minZ: -0.65, maxZ: 0.60 },
   // Port bulkhead PPE Locker
   { id: 'ppe-locker', minX: -5.20, maxX: -4.42, minZ: 2.20, maxZ: 3.70 },
   // Port-forward VCB Diagnostic Workbench

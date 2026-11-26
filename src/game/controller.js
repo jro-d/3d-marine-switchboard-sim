@@ -25,6 +25,11 @@ import {
 import { createSwitchroom } from './room.js';
 import { createEngineerCharacter } from './character.js';
 import { createInteractionManager } from './interaction.js';
+import {
+  computeMicroStepPose,
+  resolveActionSocketMeta,
+  smoothstep01,
+} from './ik.js';
 
 const TOOL_LABELS = {
   none: 'Hands free',
@@ -515,26 +520,79 @@ export function initSwitchroomGame(bridge) {
 
   function startAnimatedAction(action, station) {
     if (!action || game.activeAnim) return;
+    const sim = getSim();
+
     if (station) {
       game.player.yaw = station.faceYaw;
-      if (station.kind === 'bay' && station.cubId) {
+      if ((station.kind === 'bay' || station.kind === 'rear-bay') && station.cubId) {
         simActions.selectCubicle(station.cubId);
       }
     }
 
     game.player.targetPoint = null;
+    game.player.waypoints = null;
     game.player.isBusy = true;
     game.heldTool = action.tool || 'none';
     character.setHeldTool(game.heldTool);
 
+    // Resolve live 3D socket for micro-positioning & exact hand/tool IK alignment
+    const socketMeta = resolveActionSocketMeta(action, sim);
+    const sock =
+      socketMeta && getControlSocket
+        ? getControlSocket(socketMeta.cubId, socketMeta.socketId)
+        : null;
+
+    let socketRef = null;
+    let socketWorldPos = null;
+    let isRearSocket = false;
+    let microStep = null;
+
+    if (sock) {
+      const wp = sock.getWorldPosition();
+      const horizDist = Math.hypot(wp.x - game.player.x, wp.z - game.player.z);
+      if (horizDist <= 2.65) {
+        socketRef = sock;
+        socketWorldPos = wp.clone();
+        isRearSocket = socketMeta.socketId === 'rearDoorHandle' || wp.z < -0.25;
+        const micro = computeMicroStepPose({
+          socketWorldPos: wp,
+          socketId: socketMeta.socketId,
+          toolId: game.heldTool,
+        });
+        const trolleyObs = getTrolleyObstacleAabb(sim.trolley);
+        const clamped = resolveCollision(
+          micro.x,
+          micro.z,
+          PLAYER_RADIUS,
+          trolleyObs ? [trolleyObs] : []
+        );
+        microStep = {
+          fromX: game.player.x,
+          fromZ: game.player.z,
+          fromYaw: game.player.yaw,
+          toX: clamped.x,
+          toZ: clamped.z,
+          toYaw: micro.faceYaw,
+          duration: 0.22,
+        };
+      }
+    }
+
+    const baseDuration = action.duration || 0.95;
     game.activeAnim = {
       type: action.anim || 'push_button',
       label: action.label,
       tool: game.heldTool,
       elapsed: 0,
-      duration: action.duration || 0.95,
-      commitAt: (action.duration || 0.95) * 0.56,
+      duration: baseDuration,
+      commitAt: baseDuration * 0.54,
       committed: false,
+      cubId: socketMeta?.cubId || null,
+      socketId: socketMeta?.socketId || null,
+      socketRef,
+      socketWorldPos,
+      isRear: isRearSocket,
+      microStep,
       onCommit: () => executeBridgeAction(action),
     };
 
@@ -644,6 +702,7 @@ export function initSwitchroomGame(bridge) {
 
     if (!game.activeAnim) {
       game.heldTool = SIM_TO_GAME_TOOL[sim.activeTool] || 'none';
+      character.setHeldTool(game.heldTool);
     }
     elPpeStatus.textContent = `PPE: ${ppeCount}/3 · Tool: ${TOOL_LABELS[game.heldTool] || sim.activeTool || 'Hands free'}`;
     elPpeStatus.classList.toggle('ok', isFullPpeState(sim.ppe));
@@ -872,6 +931,27 @@ export function initSwitchroomGame(bridge) {
       elBusyPct.textContent = `${pct}%`;
       elBusyFill.style.width = `${pct}%`;
 
+      if (anim.microStep) {
+        const ms = anim.microStep;
+        const mAlpha = smoothstep01(anim.elapsed / ms.duration);
+        game.player.x = THREE.MathUtils.lerp(ms.fromX, ms.toX, mAlpha);
+        game.player.z = THREE.MathUtils.lerp(ms.fromZ, ms.toZ, mAlpha);
+        const yawDiff = normalizeAngle(ms.toYaw - ms.fromYaw);
+        game.player.yaw = normalizeAngle(ms.fromYaw + yawDiff * mAlpha);
+      }
+
+      if (anim.socketRef) {
+        anim.socketWorldPos = anim.socketRef.getWorldPosition();
+        sim._activeMechAnim = {
+          cubId: anim.cubId,
+          socketId: anim.socketId,
+          animType: anim.type,
+          progress: Math.min(1, anim.elapsed / Math.max(anim.duration, 0.01)),
+        };
+      } else {
+        sim._activeMechAnim = null;
+      }
+
       if (!anim.committed && anim.elapsed >= anim.commitAt) {
         anim.committed = true;
         if (typeof anim.onCommit === 'function') anim.onCommit();
@@ -879,10 +959,13 @@ export function initSwitchroomGame(bridge) {
 
       if (anim.elapsed >= anim.duration) {
         game.activeAnim = null;
+        sim._activeMechAnim = null;
         game.player.isBusy = false;
         elBusyBar.hidden = true;
         refreshHud(true);
       }
+    } else {
+      sim._activeMechAnim = null;
     }
 
     const trolleyObstacle = getTrolleyObstacleAabb(sim.trolley);
@@ -927,16 +1010,6 @@ export function initSwitchroomGame(bridge) {
     character.root.position.set(game.player.x, 0, game.player.z);
     character.root.rotation.y = game.player.yaw;
     character.setPpeVisuals(sim.ppe);
-    character.updatePose({
-      speed: game.player.speed,
-      walkCycle: game.player.walkCycle,
-      elapsed: game.elapsed,
-      anim: game.activeAnim,
-      pushingTrolley: sim.trolley?.state === 'PUSHING',
-    });
-
-    const rec = getRecommendedTarget(sim);
-    room.syncRoomState(sim, rec.stationId, clampedDt, game.elapsed);
 
     if (game.cameraMode === 'first') {
       _camGoalPos.set(game.player.x, 1.62, game.player.z);
@@ -954,7 +1027,7 @@ export function initSwitchroomGame(bridge) {
       const rawZ = game.player.z - Math.cos(game.camYaw) * dist * Math.cos(game.camPitch);
       const rawY = 1.48 + Math.sin(game.camPitch) * dist;
 
-      let goalCamX = THREE.MathUtils.clamp(rawX, ROOM_BOUNDS.minX + 0.05, ROOM_BOUNDS.maxX - 0.05);
+      const goalCamX = THREE.MathUtils.clamp(rawX, ROOM_BOUNDS.minX + 0.05, ROOM_BOUNDS.maxX - 0.05);
       const goalCamY = THREE.MathUtils.clamp(rawY, 1.05, 3.20);
       let goalCamZ = THREE.MathUtils.clamp(rawZ, ROOM_BOUNDS.minZ - 0.05, ROOM_BOUNDS.maxZ + 0.05);
 
@@ -974,6 +1047,20 @@ export function initSwitchroomGame(bridge) {
       _camCurLook.lerp(_camGoalLook, 1 - Math.exp(-12 * clampedDt));
       camera.lookAt(_camCurLook);
     }
+
+    character.updatePose({
+      speed: game.player.speed,
+      walkCycle: game.player.walkCycle,
+      elapsed: game.elapsed,
+      dt: clampedDt,
+      anim: game.activeAnim,
+      pushingTrolley: sim.trolley?.state === 'PUSHING',
+      camera,
+      characterYaw: game.player.yaw,
+    });
+
+    const rec = getRecommendedTarget(sim);
+    room.syncRoomState(sim, rec.stationId, clampedDt, game.elapsed);
 
     interaction.updateHover(game.pointer);
     refreshHud(false);
@@ -1018,8 +1105,13 @@ export function initSwitchroomGame(bridge) {
         nearbyStation: game.nearbyStation?.id || null,
         heldTool: game.heldTool,
         isBusy: game.player.isBusy,
+        riggedGlb: character.isRiggedGlbActive(),
         trolley: sim.trolley ? { ...sim.trolley } : null,
       };
+    },
+    getActiveTipWorldPosition: () => {
+      const tp = character.getActiveTipWorldPosition(game.cameraMode === 'first');
+      return { x: Number(tp.x.toFixed(3)), y: Number(tp.y.toFixed(3)), z: Number(tp.z.toFixed(3)) };
     },
   };
 

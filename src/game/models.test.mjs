@@ -44,3 +44,40 @@ test('all binary .glb switchroom props exist and parse cleanly via Three.js GLTF
     assert.ok(meshCount >= 3, `${file} should contain multiple 3D mesh primitives (got ${meshCount})`);
   }
 });
+
+test('rigged engineer.glb parses into SkinnedMesh with humanoid skeleton and 4 locomotion AnimationClips', async () => {
+  const loader = new GLTFLoader();
+  const fullPath = path.join(MODELS_DIR, 'engineer.glb');
+  assert.equal(fs.existsSync(fullPath), true, 'Expected engineer.glb in public/models/');
+
+  const buf = fs.readFileSync(fullPath);
+  const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  const gltf = await parseGlbAsync(loader, ab);
+
+  const skinned = gltf.scene.getObjectByProperty('isSkinnedMesh', true);
+  assert.ok(skinned, 'engineer.glb must contain a SkinnedMesh');
+  const boneNames = skinned.skeleton.bones.map((b) => b.name);
+  for (const reqBone of [
+    'Hips',
+    'Spine',
+    'Chest',
+    'Neck',
+    'Head',
+    'LeftUpperArm',
+    'LeftForeArm',
+    'LeftHand',
+    'RightUpperArm',
+    'RightForeArm',
+    'RightHand',
+    'LeftThigh',
+    'LeftShin',
+    'RightThigh',
+    'RightShin',
+    'RightHandIKTarget',
+  ]) {
+    assert.equal(boneNames.includes(reqBone), true, `Expected bone ${reqBone} in engineer.glb skeleton`);
+  }
+
+  const clipNames = (gltf.animations || []).map((a) => a.name);
+  assert.deepEqual(clipNames, ['Idle', 'Walk', 'Sprint', 'PushTrolley']);
+});
