@@ -28,7 +28,15 @@ const JOBS = [
   {
     id: 'room-props',
     script: path.join(__dirname, 'build_room_props.py'),
-    outputs: ['assets-src/blender/room_props.blend'],
+    outputs: [
+      'public/models/ppe-locker.glb',
+      'public/models/permit-desk.glb',
+      'public/models/test-bench.glb',
+      'public/models/key-board.glb',
+      'public/models/vcb-workbench.glb',
+      'public/models/room-architecture.glb',
+      'assets-src/blender/room_props.blend',
+    ],
   },
   {
     id: 'trolley-and-tools',

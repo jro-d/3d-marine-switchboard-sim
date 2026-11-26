@@ -99,7 +99,7 @@ function makeFloorDecal(label, accent = '#1f6f78', size = 0.86) {
   return mesh;
 }
 
-function loadGlbPropInto(loader, url, parentGroup) {
+function loadGlbPropInto(loader, url, parentGroup, onLoaded = null) {
   if (!loader || typeof window === 'undefined') return;
   loader.load(
     url,
@@ -107,11 +107,14 @@ function loadGlbPropInto(loader, url, parentGroup) {
       if (!gltf?.scene) return;
       gltf.scene.traverse((child) => {
         if (child.isMesh) {
-          child.castShadow = true;
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          const isTransparent = mats.some((m) => m && m.transparent);
+          child.castShadow = !isTransparent;
           child.receiveShadow = true;
         }
       });
       parentGroup.add(gltf.scene);
+      if (typeof onLoaded === 'function') onLoaded(gltf.scene);
     },
     undefined,
     () => {
@@ -382,15 +385,17 @@ export function createSwitchroom(renderer) {
     ceilingGroup.add(beam);
   }
 
+  const fallbackLampsGroup = new THREE.Group();
   for (const lx of [-3.1, 0, 3.1]) {
     for (const lz of [-1.75, 1.45, 4.45]) {
       const housing = new THREE.Mesh(lampHousingGeo, steelDarkMat);
       housing.position.set(lx, H - 0.17, lz);
       const tube = new THREE.Mesh(lampTubeGeo, lampTubeMat);
       tube.position.set(lx, H - 0.20, lz);
-      ceilingGroup.add(housing, tube);
+      fallbackLampsGroup.add(housing, tube);
     }
   }
+  ceilingGroup.add(fallbackLampsGroup);
 
   // Overhead Galvanized Cable Ladder Trays + 6.6 kV Armored XLPE Feeder Runs + Bulkhead MCTs
   const trayGroup = new THREE.Group();
@@ -465,6 +470,7 @@ export function createSwitchroom(renderer) {
   const ppeGroup = new THREE.Group();
   ppeGroup.position.set(-4.82, 0, 2.95);
   ppeGroup.rotation.y = Math.PI / 2;
+  const ppeFallback = new THREE.Group();
 
   const lockerBody = new THREE.Mesh(new THREE.BoxGeometry(1.36, 2.06, 0.62), tealLockerMat);
   lockerBody.position.set(0, 1.03, 0);
@@ -474,7 +480,7 @@ export function createSwitchroom(renderer) {
   lockerRecess.position.set(0, 1.04, 0.28);
   const lockerShelf = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.04, 0.42), steelFrameMat);
   lockerShelf.position.set(0, 0.62, 0.16);
-  ppeGroup.add(lockerBody, lockerRecess, lockerShelf);
+  ppeFallback.add(lockerBody, lockerRecess, lockerShelf);
 
   const lockerSuit = new THREE.Group();
   const coatHang = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.72, 0.16), new THREE.MeshStandardMaterial({ color: 0x3b4d47, roughness: 0.82 }));
@@ -484,7 +490,7 @@ export function createSwitchroom(renderer) {
   const visorHang = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.14, 0.06), new THREE.MeshStandardMaterial({ color: 0x2c9460, roughness: 0.15, transparent: true, opacity: 0.75 }));
   visorHang.position.set(-0.28, 1.72, 0.40);
   lockerSuit.add(coatHang, hoodHang, visorHang);
-  ppeGroup.add(lockerSuit);
+  ppeFallback.add(lockerSuit);
 
   const lockerGloves = new THREE.Group();
   const gloveMat = new THREE.MeshStandardMaterial({ color: 0xe68a1e, roughness: 0.55 });
@@ -493,7 +499,7 @@ export function createSwitchroom(renderer) {
   const gRight = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.28, 0.08), gloveMat);
   gRight.position.set(0.38, 1.24, 0.34);
   lockerGloves.add(gLeft, gRight);
-  ppeGroup.add(lockerGloves);
+  ppeFallback.add(lockerGloves);
 
   const lockerBoots = new THREE.Group();
   const bootMat = new THREE.MeshStandardMaterial({ color: 0x222930, roughness: 0.72 });
@@ -505,18 +511,23 @@ export function createSwitchroom(renderer) {
   matRoll.rotation.z = Math.PI / 2;
   matRoll.position.set(0.30, 0.20, 0.26);
   lockerBoots.add(bL, bR, matRoll);
-  ppeGroup.add(lockerBoots);
+  ppeFallback.add(lockerBoots);
 
+  const ppeGlbMount = new THREE.Group();
   const ppeSign = makeSignMesh(1.36, 0.30, 'HV PPE LOCKER', '40 CAL SUIT · CLASS 2 GLOVES · 15 kV MAT', '#d4a024');
   ppeSign.position.set(0, 2.26, 0.04);
-  ppeGroup.add(ppeSign);
+  ppeGroup.add(ppeFallback, ppeGlbMount, ppeSign);
   root.add(ppeGroup);
+
+  const glbPpeNodes = { suit: null, gloves: null, boots: null };
+  let lastPpeState = { suit: false, gloves: false, bootsMat: false };
 
   // Port-Forward: VCB Diagnostic & Troubleshooting Workbench + GLB Instruments
   const vcbBenchGroup = new THREE.Group();
   vcbBenchGroup.name = 'VCBDiagnosticWorkbench';
   vcbBenchGroup.position.set(-4.80, 0, -0.35);
   vcbBenchGroup.rotation.y = Math.PI / 2;
+  const vcbBenchFallback = new THREE.Group();
 
   const wbTop = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.07, 0.68), steelFrameMat);
   wbTop.position.set(0, 0.90, 0);
@@ -528,35 +539,37 @@ export function createSwitchroom(renderer) {
   wbShelf.position.set(0, 0.28, 0);
   const wbBackboard = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.92, 0.05), steelDarkMat);
   wbBackboard.position.set(0, 1.42, -0.30);
-  const wbSign = makeSignMesh(1.48, 0.28, 'VCB DIAGNOSTIC WORKBENCH', '100A MICRO-OHMMETER · TULIP GAUGE · VDE TORQUE', '#22c55e');
-  wbSign.position.set(0, 2.12, -0.26);
-  vcbBenchGroup.add(wbTop, wbEsdMat, wbShelf, wbBackboard, wbSign);
+  vcbBenchFallback.add(wbTop, wbEsdMat, wbShelf, wbBackboard);
   for (const lx of [-0.68, 0.68]) {
     for (const lz of [-0.27, 0.27]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.88, 0.06), steelDarkMat);
       leg.position.set(lx, 0.44, lz);
-      vcbBenchGroup.add(leg);
+      vcbBenchFallback.add(leg);
     }
   }
+  const vcbBenchGlbMount = new THREE.Group();
+  const wbSign = makeSignMesh(1.48, 0.28, 'VCB DIAGNOSTIC WORKBENCH', '100A MICRO-OHMMETER · TULIP GAUGE · VDE TORQUE', '#22c55e');
+  wbSign.position.set(0, 2.12, -0.26);
   const wbToolsMount = new THREE.Group();
   wbToolsMount.position.set(0, 0.946, 0.04);
-  vcbBenchGroup.add(wbToolsMount);
+  vcbBenchGroup.add(vcbBenchFallback, vcbBenchGlbMount, wbSign, wbToolsMount);
   root.add(vcbBenchGroup);
 
   // Port-Aft: Key Box & Tool Board
   const keysGroup = new THREE.Group();
   keysGroup.position.set(-2.78, 0, 6.18);
   keysGroup.rotation.y = Math.PI;
+  const keysFallback = new THREE.Group();
 
   const keyBenchTop = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.08, 0.68), steelFrameMat);
   keyBenchTop.position.set(0, 0.90, 0);
   keyBenchTop.castShadow = true;
-  keysGroup.add(keyBenchTop);
+  keysFallback.add(keyBenchTop);
   for (const lx of [-0.70, 0.70]) {
     for (const lz of [-0.26, 0.26]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.88, 0.06), steelDarkMat);
       leg.position.set(lx, 0.44, lz);
-      keysGroup.add(leg);
+      keysFallback.add(leg);
     }
   }
   const pegboard = new THREE.Mesh(new THREE.BoxGeometry(1.54, 1.05, 0.06), steelDarkMat);
@@ -572,25 +585,28 @@ export function createSwitchroom(renderer) {
   const wallStick = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.95, 8), safetyYellowMat);
   wallStick.rotation.z = Math.PI / 2;
   wallStick.position.set(0.18, 1.76, -0.22);
+  keysFallback.add(pegboard, keyBox, wallCrank, wallStick);
+  const keysGlbMount = new THREE.Group();
   const keysSign = makeSignMesh(1.52, 0.30, 'LOTO KEY BOX & TOOLS', 'CASTELL KEYS · PADLOCKS · RACKING CRANK', '#1f6f78');
   keysSign.position.set(0, 2.22, -0.24);
-  keysGroup.add(pegboard, keyBox, keyBoxLed, wallCrank, wallStick, keysSign);
+  keysGroup.add(keysFallback, keysGlbMount, keyBoxLed, keysSign);
   root.add(keysGroup);
 
   // Starboard-Aft: Proving Unit & 5 kV Megger Bench
   const testGroup = new THREE.Group();
   testGroup.position.set(2.78, 0, 6.18);
   testGroup.rotation.y = Math.PI;
+  const testFallback = new THREE.Group();
 
   const testBenchTop = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.08, 0.68), steelFrameMat);
   testBenchTop.position.set(0, 0.90, 0);
   testBenchTop.castShadow = true;
-  testGroup.add(testBenchTop);
+  testFallback.add(testBenchTop);
   for (const lx of [-0.70, 0.70]) {
     for (const lz of [-0.26, 0.26]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.88, 0.06), steelDarkMat);
       leg.position.set(lx, 0.44, lz);
-      testGroup.add(leg);
+      testFallback.add(leg);
     }
   }
   const provingUnit = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.22, 0.22), new THREE.MeshStandardMaterial({ color: 0x2a3440, roughness: 0.48 }));
@@ -605,15 +621,18 @@ export function createSwitchroom(renderer) {
   meggerCase.position.set(0.44, 1.06, -0.02);
   const meggerScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.12), new THREE.MeshBasicMaterial({ color: 0x132c22 }));
   meggerScreen.position.set(0.44, 1.09, 0.135);
+  testFallback.add(provingUnit, benchWand, meggerCase, meggerScreen);
+  const testGlbMount = new THREE.Group();
   const testSign = makeSignMesh(1.52, 0.30, 'PROVING & MEGGER BENCH', '6.6 kV PROVING UNIT · 5 kV PI INSULATION TESTER', '#d4a024');
   testSign.position.set(0, 2.22, -0.24);
-  testGroup.add(provingUnit, provingLed, benchWand, meggerCase, meggerScreen, testSign);
+  testGroup.add(testFallback, testGlbMount, provingLed, testSign);
   root.add(testGroup);
 
   // Starboard Bulkhead: Permit Desk
   const permitGroup = new THREE.Group();
   permitGroup.position.set(4.82, 0, 2.95);
   permitGroup.rotation.y = -Math.PI / 2;
+  const permitFallback = new THREE.Group();
 
   const deskTop = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.07, 0.68), deskWoodMat);
   deskTop.position.set(0, 0.94, 0);
@@ -628,12 +647,14 @@ export function createSwitchroom(renderer) {
   sftFolder.rotation.y = -0.10;
   const permitLampStem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.24, 10), steelFrameMat);
   permitLampStem.position.set(0, 1.09, -0.18);
+  permitFallback.add(deskTop, deskBase, ptwBinder, sftFolder, permitLampStem);
   const permitBeaconMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
   const permitBeacon = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 12), permitBeaconMat);
   permitBeacon.position.set(0, 1.24, -0.18);
+  const permitGlbMount = new THREE.Group();
   const permitSign = makeSignMesh(1.38, 0.30, 'PERMIT-TO-WORK DESK', 'PTW & SANCTION-FOR-TEST AUTHORIZATION', '#1f6f78');
   permitSign.position.set(0, 2.26, 0.04);
-  permitGroup.add(deskTop, deskBase, ptwBinder, sftFolder, permitLampStem, permitBeacon, permitSign);
+  permitGroup.add(permitFallback, permitGlbMount, permitBeacon, permitSign);
   root.add(permitGroup);
 
   // Aft Bulkhead Entry & Emergency Safety Station (.glb Watertight Door, Rescue Hook, CO2 Extinguisher + First-Aid Kit)
@@ -676,14 +697,7 @@ export function createSwitchroom(renderer) {
   firstAidGroup.add(faBox, faCrossH, faCrossV);
   root.add(firstAidGroup);
 
-  // Load binary .glb models from public/models/
-  if (typeof window !== 'undefined') {
-    const loader = getSharedGltfLoader();
-    loadGlbPropInto(loader, resolvePublicAssetUrl('models/watertight-door.glb'), aftDoorMount);
-    loadGlbPropInto(loader, resolvePublicAssetUrl('models/rescue-hook.glb'), rescueHookMount);
-    loadGlbPropInto(loader, resolvePublicAssetUrl('models/co2-extinguisher.glb'), co2Mount);
-    loadGlbPropInto(loader, resolvePublicAssetUrl('models/workbench-tools.glb'), wbToolsMount);
-  }
+  // Existing prop mounts placed above; all GLBs loaded cleanly once mounts are initialized below.
 
   // Click proxies & painted floor decals for all stations
   const proxyMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -744,11 +758,53 @@ export function createSwitchroom(renderer) {
 
   const wheelStopGeo = new THREE.BoxGeometry(0.78, 0.036, 0.065);
   const wheelStopMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, roughness: 0.85, metalness: 0.08 });
+  const fallbackStopsGroup = new THREE.Group();
   const parkStop = new THREE.Mesh(wheelStopGeo, wheelStopMat);
   parkStop.position.set(TROLLEY_PARK_POS.x, 0.018, TROLLEY_PARK_POS.z - 0.50);
   const maintStop = new THREE.Mesh(wheelStopGeo, wheelStopMat);
   maintStop.position.set(MAINTENANCE_ZONE_POS.x, 0.018, MAINTENANCE_ZONE_POS.z - 0.50);
-  root.add(parkStop, maintStop);
+  fallbackStopsGroup.add(parkStop, maintStop);
+  root.add(fallbackStopsGroup);
+
+  const archGlbMount = new THREE.Group();
+  archGlbMount.name = 'RoomArchitectureGlbMount';
+  root.add(archGlbMount);
+
+  // Load binary .glb models from public/models/ (including Blender Draco high-poly stations & architecture)
+  if (typeof window !== 'undefined') {
+    const loader = getSharedGltfLoader();
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/watertight-door.glb'), aftDoorMount);
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/rescue-hook.glb'), rescueHookMount);
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/co2-extinguisher.glb'), co2Mount);
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/workbench-tools.glb'), wbToolsMount);
+
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/ppe-locker.glb'), ppeGlbMount, (scene) => {
+      ppeFallback.visible = false;
+      glbPpeNodes.suit = scene.getObjectByName('PpeLockerSuit');
+      glbPpeNodes.gloves = scene.getObjectByName('PpeLockerGloves');
+      glbPpeNodes.boots = scene.getObjectByName('PpeLockerBoots');
+      if (glbPpeNodes.suit) glbPpeNodes.suit.visible = !lastPpeState.suit;
+      if (glbPpeNodes.gloves) glbPpeNodes.gloves.visible = !lastPpeState.gloves;
+      if (glbPpeNodes.boots) glbPpeNodes.boots.visible = !lastPpeState.bootsMat;
+    });
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/vcb-workbench.glb'), vcbBenchGlbMount, () => {
+      vcbBenchFallback.visible = false;
+    });
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/key-board.glb'), keysGlbMount, () => {
+      keysFallback.visible = false;
+    });
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/test-bench.glb'), testGlbMount, () => {
+      testFallback.visible = false;
+    });
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/permit-desk.glb'), permitGlbMount, () => {
+      permitFallback.visible = false;
+    });
+    loadGlbPropInto(loader, resolvePublicAssetUrl('models/room-architecture.glb'), archGlbMount, () => {
+      fallbackLampsGroup.visible = false;
+      firstAidGroup.visible = false;
+      fallbackStopsGroup.visible = false;
+    });
+  }
 
   const maintSign = makeSignMesh(1.48, 0.30, 'VCB MAINTENANCE BAY', 'WITHDRAWN 6.6 kV BREAKER INSPECTION ZONE', '#22c55e');
   maintSign.position.set(MAINTENANCE_ZONE_POS.x, 2.34, -2.71);
@@ -817,9 +873,17 @@ export function createSwitchroom(renderer) {
   function syncRoomState(sim, recommendedStationId, dt, elapsed) {
     if (!sim) return;
 
-    lockerSuit.visible = !sim.ppe.suit;
-    lockerGloves.visible = !sim.ppe.gloves;
-    lockerBoots.visible = !sim.ppe.bootsMat;
+    lastPpeState = {
+      suit: Boolean(sim.ppe.suit),
+      gloves: Boolean(sim.ppe.gloves),
+      bootsMat: Boolean(sim.ppe.bootsMat),
+    };
+    lockerSuit.visible = !lastPpeState.suit;
+    lockerGloves.visible = !lastPpeState.gloves;
+    lockerBoots.visible = !lastPpeState.bootsMat;
+    if (glbPpeNodes.suit) glbPpeNodes.suit.visible = !lastPpeState.suit;
+    if (glbPpeNodes.gloves) glbPpeNodes.gloves.visible = !lastPpeState.gloves;
+    if (glbPpeNodes.boots) glbPpeNodes.boots.visible = !lastPpeState.bootsMat;
 
     keyBoxStatusLedMat.color.setHex(sim.keyBoxLocked ? 0x22c55e : 0xe69f00);
     provingLedMat.color.setHex(sim.ptp.state === 1 ? 0x38bdf8 : sim.ptp.state === 2 ? 0xfacc15 : 0x22c55e);
