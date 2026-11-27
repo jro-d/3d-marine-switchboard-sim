@@ -138,17 +138,17 @@ Enforced across **every phase** before exporting any `.glb`:
 
 ### Phase 4 — PPE Locker, Workstations & Diagnostic Bench Tools
 * **User Reference Upload Gate (Upload BEFORE Modeling):**
-  * `assets-src/references/ref-07-ppe-locker.png`
-  * `assets-src/references/ref-08-workstations-and-instruments.png`
+  * `assets-src/references/ref-07-ppe-locker.jpg`
+  * `assets-src/references/ref-08-workstations-and-instruments.jpg`
 * **Tasks:**
   1. Antigravity inspects `ref-07` and upgrades `ppe-locker.glb` (clean satin marine-teal cabinet without metallic speckle, pivoted door leaves if animated, and sharp `PpeLockerSuit`, `PpeLockerGloves`, `PpeLockerBoots` dynamic child groups).
   2. Antigravity inspects `ref-08` and upgrades `permit-desk.glb`, `test-bench.glb`, `key-board.glb`, `vcb-workbench.glb`, and `workbench-tools.glb` (clean satin steel frames, smooth hardwood/ESD mats, crisp backlit LCDs, sharp 6 padlocks/Castell keys, DLRO, VDE torque wrench, multimeter, spare copper tulip cluster).
   3. Export uncompressed `.glb` files to `godot/assets/models/` and place inherited scenes (`ppe_locker.tscn`, `permit_desk.tscn`, `test_bench.tscn`, `key_board.tscn`, `vcb_workbench.tscn`) into `switchroom.tscn` with interaction `Area3D` triggers and indicator LED nodes.
 * **Verification Checklist (Phase 4):**
-  * [ ] `ref-07` & `ref-08` matched visually via Blender MCP screenshots.
-  * [ ] Teal PPE locker and all steel bench frames read clearly as smooth satin painted steel (`metallic = 0.0`).
-  * [ ] Dynamic child groups (`PpeLockerSuit`, `PpeLockerGloves`, `PpeLockerBoots`) toggle visibility cleanly in Godot when the player equips PPE.
-  * [ ] Station interaction beacons (`permitBeacon`, `provingLed`, `keyBoxLed`) align flush with their Blender mast/bezel sockets.
+  * [x] `ref-07` & `ref-08` matched visually via Blender MCP screenshots (`phase4_ppe_locker_preview.png`, `phase4_stations_preview.png`).
+  * [x] Teal PPE locker and all steel bench frames read clearly as smooth satin painted steel (`metallic = 0.0`).
+  * [x] Dynamic child groups (`PpeLockerSuit`, `PpeLockerGloves`, `PpeLockerBoots`) toggle visibility cleanly in Godot (`ppe_locker.gd`) when the player equips PPE.
+  * [x] Station interaction beacons (`PermitBeaconSocket`, `ProvingLedSocket`, `KeyBoxLedSocket`) and `WorkbenchToolsSocket` verified in `switchroom.tscn`.
 
 ---
 

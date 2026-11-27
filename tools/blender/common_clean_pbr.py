@@ -116,6 +116,15 @@ def build_clean_material_library():
         'bulkhead':     ('MarineBulkheadWall',     (0.75, 0.77, 0.79), 0.0,  0.48, 0.08, 0.22, 1.0, None, 0.0),
         'pipe_grey':    ('MarineAirPipeGrey',      (0.36, 0.42, 0.48), 0.0,  0.38, 0.15, 0.18, 1.0, None, 0.0),
         'led_panel':    ('MarineLedDiffuser',      (0.95, 0.98, 1.00), 0.0,  0.18, 0.0,  0.10, 1.0, (0.95, 0.98, 1.00), 1.6),
+        'oak_wood':     ('LaminatedOakTop',        (0.48, 0.34, 0.20), 0.0,  0.42, 0.18, 0.20, 1.0, None, 0.0),
+        'esd_green':    ('PhenolicEsdMat',         (0.06, 0.28, 0.17), 0.0,  0.62, 0.0,  0.20, 1.0, None, 0.0),
+        'khaki_nomex':  ('ArcFlashNomexKhaki',     (0.52, 0.48, 0.36), 0.0,  0.78, 0.0,  0.20, 1.0, None, 0.0),
+        'olive_trim':   ('ArcFlashTrimOlive',      (0.24, 0.25, 0.20), 0.0,  0.72, 0.0,  0.20, 1.0, None, 0.0),
+        'emerald_visor':('ArcVisorEmerald',        (0.08, 0.48, 0.24), 0.0,  0.08, 0.90, 0.05, 0.56, None, 0.0),
+        'glove_orange': ('Class2DielectricOrange', (0.88, 0.28, 0.05), 0.0,  0.38, 0.18, 0.20, 1.0, None, 0.0),
+        'leather_tan':  ('GloveLeatherTan',        (0.68, 0.52, 0.34), 0.0,  0.64, 0.0,  0.20, 1.0, None, 0.0),
+        'bin_blue':     ('MarinePartsBinBlue',     (0.10, 0.28, 0.54), 0.0,  0.38, 0.15, 0.18, 1.0, None, 0.0),
+        'cable_blue':   ('MeggerGuardBlue',        (0.08, 0.28, 0.72), 0.0,  0.44, 0.10, 0.20, 1.0, None, 0.0),
     }
     return {k: _make_clean_mat(*v) for k, v in specs.items()}
 
