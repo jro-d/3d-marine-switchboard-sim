@@ -3,9 +3,23 @@ extends Node3D
 @onready var hv_sim: HvSimCore = $HvSimCore
 @onready var switchroom: Switchroom = $Switchroom
 @onready var toolbelt_props: Node3D = $ToolbeltProps
+@onready var camera_3d: Camera3D = $Camera3D
+
+var _follow_cam: bool = false
+var _cam_yaw: float = 0.35
+var _cam_pitch: float = -0.22
+var _cam_dist: float = 3.6
+var _overview_xform: Transform3D
+var _orbiting: bool = false
+var _door_open: bool = false
+var _tool_idx: int = -1
+var _held_tool: Node3D
+var _held_orig_xform: Transform3D
 
 
 func _ready() -> void:
+	if camera_3d != null:
+		_overview_xform = camera_3d.global_transform
 	if hv_sim != null:
 		print(hv_sim.get_sim_info())
 	if switchroom != null:
@@ -99,5 +113,88 @@ func _ready() -> void:
 		for child in toolbelt_props.get_children():
 			if child is HandheldTool:
 				assert(child.tip_anchor != null, "Missing TipAnchor on %s" % child.name)
+				child.visible = false
 				tool_names.append(child.name)
 		print("ToolbeltProps ready with %d tools: %s" % [tool_names.size(), ", ".join(tool_names)])
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_RIGHT:
+			_orbiting = mb.pressed
+		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_cam_dist = clamp(_cam_dist - 0.35, 1.6, 8.5)
+		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_cam_dist = clamp(_cam_dist + 0.35, 1.6, 8.5)
+	elif event is InputEventMouseMotion and _orbiting:
+		var mm := event as InputEventMouseMotion
+		_cam_yaw -= mm.relative.x * 0.0055
+		_cam_pitch = clamp(_cam_pitch - mm.relative.y * 0.0045, -1.15, 0.35)
+		if not _follow_cam and camera_3d != null:
+			_follow_cam = true
+	elif event is InputEventKey and event.pressed and not event.echo:
+		var ke := event as InputEventKey
+		if switchroom == null or switchroom.engineer == null:
+			return
+		var eng := switchroom.engineer
+		var ppe := switchroom.ppe_locker
+		match ke.keycode:
+			KEY_1:
+				eng.set_ppe_equipped(not eng.ppe_suit, eng.ppe_gloves, eng.ppe_boots)
+				if ppe != null:
+					ppe.set_ppe_equipped(eng.ppe_suit, eng.ppe_gloves, eng.ppe_boots)
+			KEY_2:
+				eng.set_ppe_equipped(eng.ppe_suit, not eng.ppe_gloves, eng.ppe_boots)
+				if ppe != null:
+					ppe.set_ppe_equipped(eng.ppe_suit, eng.ppe_gloves, eng.ppe_boots)
+			KEY_3:
+				eng.set_ppe_equipped(eng.ppe_suit, eng.ppe_gloves, not eng.ppe_boots)
+				if ppe != null:
+					ppe.set_ppe_equipped(eng.ppe_suit, eng.ppe_gloves, eng.ppe_boots)
+			KEY_F, KEY_E:
+				eng.trigger_interact()
+				if switchroom.watertight_door != null:
+					_door_open = not _door_open
+					switchroom.watertight_door.set_door_open(_door_open)
+			KEY_T:
+				_cycle_held_tool(eng)
+			KEY_V:
+				_follow_cam = not _follow_cam
+				if not _follow_cam and camera_3d != null:
+					camera_3d.global_transform = _overview_xform
+
+
+func _cycle_held_tool(eng: EngineerCharacter) -> void:
+	if toolbelt_props == null:
+		return
+	if _held_tool != null and _held_tool.get_parent() == eng.right_tool_socket:
+		eng.right_tool_socket.remove_child(_held_tool)
+		toolbelt_props.add_child(_held_tool)
+		_held_tool.transform = _held_orig_xform
+		_held_tool.visible = false
+		_held_tool = null
+	var count := toolbelt_props.get_child_count()
+	if count == 0:
+		return
+	_tool_idx += 1
+	if _tool_idx >= count:
+		_tool_idx = -1
+		return
+	var next_tool := toolbelt_props.get_child(_tool_idx) as Node3D
+	if next_tool != null:
+		_held_orig_xform = next_tool.transform
+		eng.attach_tool(next_tool)
+		_held_tool = next_tool
+
+
+func _process(_delta: float) -> void:
+	if _follow_cam and camera_3d != null and switchroom != null and switchroom.engineer != null:
+		var focus := switchroom.engineer.global_position + Vector3(0.0, 1.32, 0.0)
+		var offset := Vector3(
+			cos(_cam_pitch) * sin(_cam_yaw) * _cam_dist,
+			-sin(_cam_pitch) * _cam_dist,
+			cos(_cam_pitch) * cos(_cam_yaw) * _cam_dist
+		)
+		camera_3d.global_position = focus + offset
+		camera_3d.look_at(focus, Vector3.UP)
