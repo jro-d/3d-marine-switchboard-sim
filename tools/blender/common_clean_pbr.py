@@ -125,6 +125,25 @@ def build_clean_material_library():
         'leather_tan':  ('GloveLeatherTan',        (0.68, 0.52, 0.34), 0.0,  0.64, 0.0,  0.20, 1.0, None, 0.0),
         'bin_blue':     ('MarinePartsBinBlue',     (0.10, 0.28, 0.54), 0.0,  0.38, 0.15, 0.18, 1.0, None, 0.0),
         'cable_blue':   ('MeggerGuardBlue',        (0.08, 0.28, 0.72), 0.0,  0.44, 0.10, 0.20, 1.0, None, 0.0),
+        # Clean Non-Grainy Phase 5 Marine ETO Character & PPE Materials (Linear RGB calibrated)
+        'navy_fr':        ('FRCoverallNavy',         (0.020, 0.048, 0.125), 0.0,  0.72, 0.0,  0.20, 1.0, None, 0.0),
+        'navy_trim':      ('FRCoverallDarkTrim',     (0.012, 0.028, 0.078), 0.0,  0.68, 0.0,  0.20, 1.0, None, 0.0),
+        'cordura_knee':   ('CorduraReinforcement',   (0.014, 0.024, 0.052), 0.0,  0.66, 0.0,  0.20, 1.0, None, 0.0),
+        'hivis_yellow':   ('HiVisSafetyTapeYellow',  (0.86,  0.70,  0.03),  0.0,  0.34, 0.22, 0.16, 1.0, None, 0.0),
+        'hivis_silver':   ('RetroReflectTapeSilver', (0.80,  0.84,  0.88),  0.72, 0.20, 0.35, 0.12, 1.0, None, 0.0),
+        'skin':           ('EngineerSkin',           (0.60,  0.36,  0.25),  0.0,  0.52, 0.05, 0.40, 1.0, None, 0.0),
+        'skin_lips':      ('EngineerLips',           (0.45,  0.22,  0.17),  0.0,  0.46, 0.0,  0.25, 1.0, None, 0.0),
+        'hair':           ('MarineCrewHair',         (0.028, 0.022, 0.018), 0.0,  0.64, 0.0,  0.20, 1.0, None, 0.0),
+        'eye_white':      ('EyeSclera',              (0.86,  0.85,  0.83),  0.0,  0.16, 0.65, 0.10, 1.0, None, 0.0),
+        'eye_iris':       ('EyeIris',                (0.05,  0.035, 0.024), 0.0,  0.08, 0.85, 0.06, 1.0, None, 0.0),
+        'glasses_frame':  ('SafetyGlassesFrame',     (0.75,  0.80,  0.86),  0.0,  0.18, 0.60, 0.08, 0.42, None, 0.0),
+        'glasses_lens':   ('SafetyGlassesLens',      (0.84,  0.92,  0.98),  0.0,  0.04, 1.0,  0.04, 0.16, None, 0.0),
+        'hardhat_white':  ('ClassEHardHatWhite',     (0.90,  0.92,  0.94),  0.0,  0.22, 0.65, 0.12, 1.0, None, 0.0),
+        'hardhat_harness':('HardHatSuspension',      (0.08,  0.10,  0.12),  0.0,  0.68, 0.0,  0.20, 1.0, None, 0.0),
+        'hardhat_badge':  ('MarineEtoBadge',         (0.05,  0.24,  0.28),  0.0,  0.32, 0.20, 0.16, 1.0, None, 0.0),
+        'gold_epaulette': ('ChiefEtoGoldStripe',     (0.86,  0.64,  0.12),  0.88, 0.24, 0.0,  0.15, 1.0, None, 0.0),
+        'radio_body':     ('VhfRadioHousing',        (0.06,  0.07,  0.08),  0.0,  0.46, 0.08, 0.20, 1.0, None, 0.0),
+        'boot_leather':   ('SafetyBootLeather',      (0.045, 0.048, 0.055), 0.0,  0.46, 0.10, 0.20, 1.0, None, 0.0),
     }
     return {k: _make_clean_mat(*v) for k, v in specs.items()}
 
@@ -517,6 +536,67 @@ def export_collection_uncompressed_glb(col, out_path):
             export_normals=True,
             export_tangents=False,
             export_materials='EXPORT',
+            export_draco_mesh_compression_enable=False,
+        )
+
+    if override_kwargs:
+        with bpy.context.temp_override(**override_kwargs):
+            _do_export()
+    else:
+        _do_export()
+
+    return total_tris, os.path.getsize(abs_path)
+
+
+def export_rigged_collection_uncompressed_glb(col, out_path):
+    """Export rigged Armature + skinned meshes + NLA actions to uncompressed glTF 2.0 .glb for Godot 4.7."""
+    objs = list(col.all_objects)
+    total_tris = sum(
+        sum(max(1, len(p.vertices) - 2) for p in obj.data.polygons)
+        for obj in objs
+        if obj.type == 'MESH'
+    )
+    abs_path = os.path.abspath(out_path)
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+
+    override_kwargs = {}
+    wm = bpy.context.window_manager
+    if wm and len(wm.windows) > 0:
+        win = wm.windows[0]
+        area = next((a for a in win.screen.areas if a.type == 'VIEW_3D'), win.screen.areas[0] if win.screen.areas else None)
+        override_kwargs['window'] = win
+        override_kwargs['screen'] = win.screen
+        if area is not None:
+            override_kwargs['area'] = area
+            region = next((r for r in area.regions if r.type == 'WINDOW'), area.regions[0] if area.regions else None)
+            if region is not None:
+                override_kwargs['region'] = region
+    arm = next((o for o in objs if o.type == 'ARMATURE'), objs[0] if objs else None)
+    if arm is not None:
+        bpy.context.view_layer.objects.active = arm
+        override_kwargs['active_object'] = arm
+
+    def _do_export():
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in objs:
+            obj.select_set(True)
+        bpy.ops.export_scene.gltf(
+            filepath=abs_path,
+            export_format='GLB',
+            use_selection=True,
+            export_yup=True,
+            export_apply=False,
+            export_texcoords=True,
+            export_normals=True,
+            export_tangents=False,
+            export_materials='EXPORT',
+            export_skins=True,
+            export_all_influences=False,
+            export_def_bones=False,
+            export_animations=True,
+            export_animation_mode='NLA_TRACKS',
+            export_force_sampling=True,
+            export_frame_step=1,
             export_draco_mesh_compression_enable=False,
         )
 
