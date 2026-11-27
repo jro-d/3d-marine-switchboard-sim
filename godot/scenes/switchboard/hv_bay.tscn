@@ -1,0 +1,24 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/hv-bay-enclosure.glb" id="1_hv"]
+[ext_resource type="Script" path="res://scripts/hv_bay.gd" id="2_script"]
+[ext_resource type="PackedScene" path="res://scenes/switchboard/vcb_cassette.tscn" id="3_vcb"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_bay"]
+size = Vector3(0.80, 2.15, 1.16)
+
+[node name="HvBay" type="Node3D"]
+script = ExtResource("2_script")
+
+[node name="Model" parent="." instance=ExtResource("1_hv")]
+
+[node name="VcbMount" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.233, 0.08)
+
+[node name="VcbCassette" parent="VcbMount" instance=ExtResource("3_vcb")]
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.075, 0)
+shape = SubResource("BoxShape3D_bay")
