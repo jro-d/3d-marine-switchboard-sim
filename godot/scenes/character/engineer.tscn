@@ -1,0 +1,75 @@
+[gd_scene load_steps=16 format=3]
+
+[ext_resource type="Script" path="res://scripts/engineer.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/models/engineer.glb" id="2_glb"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_eng"]
+radius = 0.28
+height = 1.78
+
+[sub_resource type="AnimationNodeAnimation" id="AnimNode_Idle"]
+animation = &"Idle"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimNode_Walk"]
+animation = &"Walk"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimNode_Sprint"]
+animation = &"Sprint"
+
+[sub_resource type="AnimationNodeAnimation" id="AnimNode_Interact"]
+animation = &"Interact"
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="Trans_Start_Idle"]
+advance_mode = 2
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="Trans_Idle_Walk"]
+xfade_time = 0.16
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="Trans_Walk_Idle"]
+xfade_time = 0.16
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="Trans_Walk_Sprint"]
+xfade_time = 0.15
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="Trans_Sprint_Walk"]
+xfade_time = 0.15
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="Trans_Idle_Interact"]
+xfade_time = 0.12
+
+[sub_resource type="AnimationNodeStateMachineTransition" id="Trans_Interact_Idle"]
+xfade_time = 0.18
+
+[sub_resource type="AnimationNodeStateMachine" id="StateMachine_Engineer"]
+states/Idle/node = SubResource("AnimNode_Idle")
+states/Idle/position = Vector2(300, 120)
+states/Walk/node = SubResource("AnimNode_Walk")
+states/Walk/position = Vector2(520, 60)
+states/Sprint/node = SubResource("AnimNode_Sprint")
+states/Sprint/position = Vector2(720, 60)
+states/Interact/node = SubResource("AnimNode_Interact")
+states/Interact/position = Vector2(520, 190)
+transitions = ["Start", "Idle", SubResource("Trans_Start_Idle"), "Idle", "Walk", SubResource("Trans_Idle_Walk"), "Walk", "Idle", SubResource("Trans_Walk_Idle"), "Walk", "Sprint", SubResource("Trans_Walk_Sprint"), "Sprint", "Walk", SubResource("Trans_Sprint_Walk"), "Idle", "Interact", SubResource("Trans_Idle_Interact"), "Interact", "Idle", SubResource("Trans_Interact_Idle")]
+
+[node name="Engineer" type="CharacterBody3D"]
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.89, 0)
+shape = SubResource("CapsuleShape3D_eng")
+
+[node name="Model" parent="." instance=ExtResource("2_glb")]
+
+[node name="RightHandAttachment" type="BoneAttachment3D" parent="."]
+bone_name = "RightHand"
+bone_idx = 0
+use_external_skeleton = true
+external_skeleton = NodePath("../Model/Armature/Skeleton3D")
+
+[node name="RigRightToolSocket" type="Node3D" parent="RightHandAttachment"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, -0.055, 0.01)
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+tree_root = SubResource("StateMachine_Engineer")
+anim_player = NodePath("../Model/AnimationPlayer")
+active = true

@@ -53,12 +53,46 @@ func _ready() -> void:
 		assert(not ppe.suit_node.visible and not ppe.gloves_node.visible and not ppe.boots_node.visible)
 		ppe.set_ppe_equipped(false, false, false)
 
+		var eng := switchroom.engineer
+		assert(eng != null and eng.skeleton != null and eng.anim_player != null, "Missing Engineer rig nodes")
+		assert(eng.skeleton.get_bone_count() == 19, "Expected 19 bones on Engineer Skeleton3D")
+		assert(eng.skeleton.find_bone("RightHand") >= 0 and eng.skeleton.find_bone("RightHandIKTarget") >= 0, "Missing RightHand bones")
+		assert(eng.right_hand_attachment != null and eng.right_tool_socket != null, "Missing RightHand BoneAttachment3D socket")
+		assert(eng.arc_coat != null and eng.arc_hood != null and eng.hard_hat != null, "Missing Engineer arc coat/hood/hardhat meshes")
+		assert(eng.left_bare_hand != null and eng.right_bare_hand != null and eng.left_hv_glove != null and eng.right_hv_glove != null, "Missing Engineer hand/glove meshes")
+		assert(eng.left_hv_sole != null and eng.right_hv_sole != null, "Missing Engineer HV overboot meshes")
+
+		var clips := eng.get_available_clips()
+		for req_clip in ["Idle", "Walk", "Sprint", "Interact"]:
+			assert(req_clip in clips, "Missing Engineer animation clip: %s" % req_clip)
+			eng.play_clip(req_clip)
+
+		# Verify synchronized swappable PPE states between Engineer & PpeLocker
+		eng.set_ppe_equipped(true, true, true)
+		ppe.set_ppe_equipped(true, true, true)
+		assert(eng.arc_coat.visible and eng.arc_hood.visible and not eng.hard_hat.visible)
+		assert(eng.left_hv_glove.visible and not eng.left_bare_hand.visible)
+		assert(eng.left_hv_sole.visible and eng.right_hv_sole.visible)
+		eng.set_ppe_equipped(false, false, false)
+		ppe.set_ppe_equipped(false, false, false)
+		eng.play_clip("Idle")
+
+		if toolbelt_props != null:
+			var wand := toolbelt_props.get_node_or_null("ProvingWand") as Node3D
+			if wand != null:
+				var orig_xform := wand.transform
+				eng.attach_tool(wand)
+				assert(wand.get_parent() == eng.right_tool_socket, "Failed to attach ProvingWand to RigRightToolSocket")
+				eng.right_tool_socket.remove_child(wand)
+				toolbelt_props.add_child(wand)
+				wand.transform = orig_xform
+
 		assert(switchroom.permit_desk != null and switchroom.permit_desk.socket_node != null, "Missing PermitBeaconSocket")
 		assert(switchroom.test_bench != null and switchroom.test_bench.socket_node != null, "Missing ProvingLedSocket")
 		assert(switchroom.key_board != null and switchroom.key_board.socket_node != null, "Missing KeyBoxLedSocket")
 		assert(switchroom.vcb_workbench != null and switchroom.vcb_workbench.find_child("WorkbenchToolsSocket", true, false) != null, "Missing WorkbenchToolsSocket")
 
-		print("Switchroom ready: WatertightDoor pivots, 5 bays, VcbTrolley, PpeLocker & 4 stations verified")
+		print("Switchroom ready: WatertightDoor pivots, 5 bays, VcbTrolley, PpeLocker, 4 stations & Engineer (19 bones, %d clips) verified" % clips.size())
 
 	if toolbelt_props != null:
 		var tool_names: PackedStringArray = []

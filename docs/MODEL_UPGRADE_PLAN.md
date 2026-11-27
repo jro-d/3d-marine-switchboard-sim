@@ -164,10 +164,10 @@ Enforced across **every phase** before exporting any `.glb`:
   2. Export uncompressed rigged `engineer.glb` to `godot/assets/models/`.
   3. Wire `godot/scenes/character/engineer.tscn` (`CharacterBody3D` + `Skeleton3D` + `AnimationTree` + right-hand `BoneAttachment3D` for Phase 2 toolbelt props) and test equipping/unequipping every PPE item inside `switchroom.tscn`.
 * **Verification Checklist (Phase 5):**
-  * [ ] `ref-09` & `ref-10` matched visually via Blender MCP screenshots (front, side, back, 3/4).
-  * [ ] Zero 128px stipple noise on coveralls, gloves, boots, or skin.
-  * [ ] All 4 animations (`Idle`, `Walk`, `Sprint`, `Interact`) play smoothly in Godot `AnimationPlayer` with zero skin-weight tearing across bare hands, HV gloves, arc-flash coat, and overboots.
-  * [ ] Handheld tools from Phase 2 attach cleanly to `BoneAttachment3D` in the engineer's right hand.
+  * [x] `ref-09` & `ref-10` matched visually via Blender MCP screenshots (front, side, back, 3/4).
+  * [x] Zero 128px stipple noise on coveralls, gloves, boots, or skin.
+  * [x] All 4 animations (`Idle`, `Walk`, `Sprint`, `Interact`) play smoothly in Godot `AnimationPlayer` with zero skin-weight tearing across bare hands, HV gloves, arc-flash coat, and overboots.
+  * [x] Handheld tools from Phase 2 attach cleanly to `BoneAttachment3D` in the engineer's right hand.
 
 ---
 

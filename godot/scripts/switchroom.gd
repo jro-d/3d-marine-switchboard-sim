@@ -13,3 +13,4 @@ class_name Switchroom
 @onready var test_bench: StationBeacon = $TestBench
 @onready var key_board: StationBeacon = $KeyBoard
 @onready var vcb_workbench: Node3D = $VcbWorkbench
+@onready var engineer: EngineerCharacter = $Engineer
