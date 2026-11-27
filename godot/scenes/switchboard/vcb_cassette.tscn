@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/vcb-cassette.glb" id="1_vcb"]
+[ext_resource type="Script" path="res://scripts/vcb_cassette.gd" id="2_script"]
+
+[node name="VcbCassette" type="Node3D"]
+script = ExtResource("2_script")
+
+[node name="Model" parent="." instance=ExtResource("1_vcb")]

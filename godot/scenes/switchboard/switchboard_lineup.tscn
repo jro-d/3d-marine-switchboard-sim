@@ -1,0 +1,28 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/switchboard/hv_bay.tscn" id="1_hv"]
+[ext_resource type="PackedScene" path="res://scenes/switchboard/lv_bay.tscn" id="2_lv"]
+
+[node name="SwitchboardLineup" type="Node3D"]
+
+[node name="DG1" parent="." instance=ExtResource("1_hv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.68, 0, 0)
+cub_id = "DG1"
+title_text = "C1 · DG1"
+
+[node name="BT1" parent="." instance=ExtResource("1_hv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.84, 0, 0)
+cub_id = "BT1"
+title_text = "C2 · BT1"
+
+[node name="BT-M1" parent="." instance=ExtResource("1_hv")]
+cub_id = "BT-M1"
+title_text = "C3 · BT-M1"
+
+[node name="TR1-HV" parent="." instance=ExtResource("1_hv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.84, 0, 0)
+cub_id = "TR1-HV"
+title_text = "C4 · TR1-HV"
+
+[node name="ACB-TR1-LV" parent="." instance=ExtResource("2_lv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.68, 0, 0.04)
