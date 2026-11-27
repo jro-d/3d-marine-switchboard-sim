@@ -105,18 +105,18 @@ Enforced across **every phase** before exporting any `.glb`:
 
 ### Phase 2 — VCB Withdrawal Trolley, Dielectric Mat & Handheld Toolbelt Kit
 * **User Reference Upload Gate (Upload BEFORE Modeling):**
-  * `assets-src/references/ref-04-vcb-trolley.png`
-  * `assets-src/references/ref-05-handheld-tools.png`
+  * `assets-src/references/ref-04-vcb-trolley.jpg`
+  * `assets-src/references/ref-05-handheld-tools.jpg`
 * **Tasks:**
   1. Antigravity inspects `ref-04` and upgrades `vcb-trolley.glb` in Blender 5.3 via MCP (clean satin yellow/slate chassis, machined stainless guide rails aligned to `hv-bay` rail height, preserved node pivots `TrolleyWheel_0..3`, `TrolleyLatchHook_L/R`, `TrolleyBrakePedals`, plus VCB bed anchor).
   2. Antigravity inspects `ref-05` and builds the 7 handheld tools + switchboard floor mat (`proving-wand.glb`, `racking-crank.glb`, `castell-key.glb`, `loto-padlock.glb`, `cme-earth-lead.glb`, `megger-probes.glb`, `ptw-clipboard.glb`, `dielectric-mat.glb`) with clean grip/tip anchor empties.
   3. Save `.blend` (`trolley_and_tools.blend`) and export uncompressed `.glb` files to `godot/assets/models/`.
   4. Build Godot inherited scenes (`vcb_trolley.tscn`, `toolbelt_props.tscn`, `dielectric_mat.tscn`) and verify trolley rail alignment against `hv_bay.tscn`.
 * **Verification Checklist (Phase 2):**
-  * [ ] `ref-04` & `ref-05` matched visually via Blender MCP screenshots.
-  * [ ] `TrolleyWheel_0..3` spin cleanly on local axle origins; `TrolleyLatchHook_L/R` align with `hv_bay.tscn` latch points.
-  * [ ] `vcb_cassette.tscn` transfers cleanly between `hv_bay.tscn` and `vcb_trolley.tscn` deck height without floating or intersecting.
-  * [ ] Every handheld tool `.glb` has a clean grip origin and tip marker for character attachment.
+  * [x] `ref-04` & `ref-05` matched visually via Blender MCP screenshots (`phase2_trolley_preview.png`, `phase2_tools_preview.png`).
+  * [x] `TrolleyWheel_0..3` spin cleanly on local axle origins; `TrolleyLatchHook_L/R` align with `hv_bay.tscn` latch points.
+  * [x] `vcb_cassette.tscn` transfers cleanly between `hv_bay.tscn` and `vcb_trolley.tscn` (`VcbBedAnchor`) deck height without floating or intersecting.
+  * [x] Every handheld tool `.glb` has a clean grip origin (`(0,0,0)`) and `TipAnchor` marker for character attachment.
 
 ---
 
