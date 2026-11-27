@@ -1,0 +1,21 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/permit-desk.glb" id="1_desk"]
+[ext_resource type="Script" path="res://scripts/station_beacon.gd" id="2_beacon"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_desk"]
+size = Vector3(1.44, 0.96, 0.68)
+
+[node name="PermitDesk" type="Node3D"]
+script = ExtResource("2_beacon")
+socket_name = "PermitBeaconSocket"
+bulb_radius = 0.042
+default_color = Color(0.95, 0.65, 0.10, 1)
+
+[node name="Model" parent="." instance=ExtResource("1_desk")]
+
+[node name="StaticBody3D" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.48, 0)
+shape = SubResource("BoxShape3D_desk")

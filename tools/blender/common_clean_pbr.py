@@ -116,6 +116,15 @@ def build_clean_material_library():
         'bulkhead':     ('MarineBulkheadWall',     (0.75, 0.77, 0.79), 0.0,  0.48, 0.08, 0.22, 1.0, None, 0.0),
         'pipe_grey':    ('MarineAirPipeGrey',      (0.36, 0.42, 0.48), 0.0,  0.38, 0.15, 0.18, 1.0, None, 0.0),
         'led_panel':    ('MarineLedDiffuser',      (0.95, 0.98, 1.00), 0.0,  0.18, 0.0,  0.10, 1.0, (0.95, 0.98, 1.00), 1.6),
+        'oak_wood':     ('LaminatedOakTop',        (0.48, 0.34, 0.20), 0.0,  0.42, 0.18, 0.20, 1.0, None, 0.0),
+        'esd_green':    ('PhenolicEsdMat',         (0.06, 0.28, 0.17), 0.0,  0.62, 0.0,  0.20, 1.0, None, 0.0),
+        'khaki_nomex':  ('ArcFlashNomexKhaki',     (0.52, 0.48, 0.36), 0.0,  0.78, 0.0,  0.20, 1.0, None, 0.0),
+        'olive_trim':   ('ArcFlashTrimOlive',      (0.24, 0.25, 0.20), 0.0,  0.72, 0.0,  0.20, 1.0, None, 0.0),
+        'emerald_visor':('ArcVisorEmerald',        (0.08, 0.48, 0.24), 0.0,  0.08, 0.90, 0.05, 0.56, None, 0.0),
+        'glove_orange': ('Class2DielectricOrange', (0.88, 0.28, 0.05), 0.0,  0.38, 0.18, 0.20, 1.0, None, 0.0),
+        'leather_tan':  ('GloveLeatherTan',        (0.68, 0.52, 0.34), 0.0,  0.64, 0.0,  0.20, 1.0, None, 0.0),
+        'bin_blue':     ('MarinePartsBinBlue',     (0.10, 0.28, 0.54), 0.0,  0.38, 0.15, 0.18, 1.0, None, 0.0),
+        'cable_blue':   ('MeggerGuardBlue',        (0.08, 0.28, 0.72), 0.0,  0.44, 0.10, 0.20, 1.0, None, 0.0),
     }
     return {k: _make_clean_mat(*v) for k, v in specs.items()}
 
@@ -226,12 +235,17 @@ class CleanHardSurfaceBuilder:
         return verts
 
     def tube(self, points, radius, mat_key, segs=12, closed=False, cap_ends=True):
-        """Sweep a circular profile along a 3D polyline in world coordinates."""
+        """Sweep a circular/tapered profile along a 3D polyline using Parallel Transport."""
         slot = self._slot(mat_key)
         pts = [Vector(p) for p in points]
         n = len(pts)
         if n < 2:
             return []
+
+        if isinstance(radius, (list, tuple)):
+            radii = [float(r) for r in radius]
+        else:
+            radii = [float(radius)] * n
 
         rings = []
         all_verts = []
@@ -261,11 +275,12 @@ class CleanHardSurfaceBuilder:
 
             prev_tangent = tangent
             prev_norm = norm
+            r_here = radii[idx]
 
             ring = []
             for s in range(segs):
                 ang = (2.0 * math.pi * s) / segs
-                offset = (norm * math.cos(ang) + binorm * math.sin(ang)) * radius
+                offset = (norm * math.cos(ang) + binorm * math.sin(ang)) * r_here
                 v = self.bm.verts.new(p + offset)
                 ring.append(v)
                 all_verts.append(v)
@@ -288,6 +303,107 @@ class CleanHardSurfaceBuilder:
 
         return all_verts
 
+    def loft_rings(self, rings, mat_keys, cap_start=True, cap_end=True):
+        """
+        Stitch closed rings of equal vertex count into a smooth organic quad loft.
+        `rings`: list of list-of-(x, y, z)
+        `mat_keys`: single str or list[str] of length len(rings) - 1
+        """
+        n_rings = len(rings)
+        segs = len(rings[0])
+        bm_rings = []
+        all_verts = []
+        for ring in rings:
+            vr = [self.bm.verts.new(Vector(p)) for p in ring]
+            bm_rings.append(vr)
+            all_verts.extend(vr)
+
+        for ri in range(n_rings - 1):
+            mk = mat_keys if isinstance(mat_keys, str) else mat_keys[ri]
+            slot = self._slot(mk)
+            r0 = bm_rings[ri]
+            r1 = bm_rings[ri + 1]
+            for si in range(segs):
+                sn = (si + 1) % segs
+                try:
+                    f = self.bm.faces.new((r0[si], r0[sn], r1[sn], r1[si]))
+                    f.material_index = slot
+                except ValueError:
+                    pass
+
+        if cap_start:
+            mk = mat_keys if isinstance(mat_keys, str) else mat_keys[0]
+            slot = self._slot(mk)
+            center = sum((Vector(p) for p in rings[0]), Vector()) / segs
+            vc = self.bm.verts.new(center)
+            all_verts.append(vc)
+            for si in range(segs):
+                sn = (si + 1) % segs
+                try:
+                    f = self.bm.faces.new((bm_rings[0][sn], bm_rings[0][si], vc))
+                    f.material_index = slot
+                except ValueError:
+                    pass
+
+        if cap_end:
+            mk = mat_keys if isinstance(mat_keys, str) else mat_keys[-1]
+            slot = self._slot(mk)
+            center = sum((Vector(p) for p in rings[-1]), Vector()) / segs
+            vc = self.bm.verts.new(center)
+            all_verts.append(vc)
+            for si in range(segs):
+                sn = (si + 1) % segs
+                try:
+                    f = self.bm.faces.new((bm_rings[-1][si], bm_rings[-1][sn], vc))
+                    f.material_index = slot
+                except ValueError:
+                    pass
+
+        return all_verts
+
+    def curved_shell_arc(self, center, rx, ry, z_bot, z_top, ang_start_deg, ang_end_deg, thickness, mat_key, segs=18, v_segs=6):
+        """Build a curved wraparound panel (e.g., curved visor or visor frame) centered at *center* around Z."""
+        slot = self._slot(mat_key)
+        cx, cy = center[0], center[1]
+        a0 = math.radians(ang_start_deg)
+        a1 = math.radians(ang_end_deg)
+
+        outer_grid = []
+        inner_grid = []
+        for vi in range(v_segs + 1):
+            t = vi / v_segs
+            z = z_bot + (z_top - z_bot) * t
+            # Slight barrel curvature top/bottom
+            row_out = []
+            row_in = []
+            for si in range(segs + 1):
+                u = si / segs
+                ang = a0 + (a1 - a0) * u
+                ca, sa = math.sin(ang), -math.cos(ang)  # centered on -Y front
+                row_out.append(self.bm.verts.new((cx + rx * ca, cy + ry * sa, z)))
+                row_in.append(self.bm.verts.new((cx + (rx - thickness) * ca, cy + (ry - thickness) * sa, z)))
+            outer_grid.append(row_out)
+            inner_grid.append(row_in)
+
+        for vi in range(v_segs):
+            for si in range(segs):
+                f_out = self.bm.faces.new((outer_grid[vi][si], outer_grid[vi][si + 1], outer_grid[vi + 1][si + 1], outer_grid[vi + 1][si]))
+                f_out.material_index = slot
+                f_in = self.bm.faces.new((inner_grid[vi][si + 1], inner_grid[vi][si], inner_grid[vi + 1][si], inner_grid[vi + 1][si + 1]))
+                f_in.material_index = slot
+
+        # Cap edges (left/right/top/bottom)
+        for vi in range(v_segs):
+            f_l = self.bm.faces.new((inner_grid[vi][0], outer_grid[vi][0], outer_grid[vi + 1][0], inner_grid[vi + 1][0]))
+            f_l.material_index = slot
+            f_r = self.bm.faces.new((outer_grid[vi][-1], inner_grid[vi][-1], inner_grid[vi + 1][-1], outer_grid[vi + 1][-1]))
+            f_r.material_index = slot
+        for si in range(segs):
+            f_b = self.bm.faces.new((inner_grid[0][si], inner_grid[0][si + 1], outer_grid[0][si + 1], outer_grid[0][si]))
+            f_b.material_index = slot
+            f_t = self.bm.faces.new((outer_grid[-1][si], outer_grid[-1][si + 1], inner_grid[-1][si + 1], inner_grid[-1][si]))
+            f_t.material_index = slot
+
     def handle_u(self, center, span, depth, radius=0.006, mat_key='stainless', axis='z', face_normal=(0, -1, 0)):
         """Build a clean U-shaped cabinet pull handle protruding along face_normal."""
         cx, cy, cz = center
@@ -308,7 +424,7 @@ class CleanHardSurfaceBuilder:
             ]
         return self.tube(pts, radius, mat_key, segs=10)
 
-    def finish(self, name, col, parent=None, origin=(0.0, 0.0, 0.0), parent_is_at_origin=False):
+    def finish(self, name, col, parent=None, origin=(0.0, 0.0, 0.0), parent_is_at_origin=False, subsurf_levels=0):
         """Create mesh object with geometry shifted by -origin. Set parent_is_at_origin=True when *parent* already sits at *origin*."""
         ox, oy, oz = origin
         if abs(ox) > 1e-6 or abs(oy) > 1e-6 or abs(oz) > 1e-6:
@@ -345,6 +461,12 @@ class CleanHardSurfaceBuilder:
         col.objects.link(obj)
         if parent is not None:
             obj.parent = parent
+
+        if subsurf_levels > 0:
+            sub = obj.modifiers.new(name='Subsurf', type='SUBSURF')
+            sub.levels = int(subsurf_levels)
+            sub.render_levels = int(subsurf_levels)
+            sub.boundary_smooth = 'PRESERVE_CORNERS'
 
         wn = obj.modifiers.new(name='WeightedNormal', type='WEIGHTED_NORMAL')
         wn.keep_sharp = True

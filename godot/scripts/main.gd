@@ -46,7 +46,19 @@ func _ready() -> void:
 			bt_m1.vcb_cassette.position = Vector3.ZERO
 		trolley.set_latches_engaged(false)
 		trolley.set_deck_height(VcbTrolley.DEFAULT_DECK_HEIGHT)
-		print("Switchroom ready: WatertightDoor pivots, 5 bays, and VcbTrolley verified")
+
+		var ppe := switchroom.ppe_locker
+		assert(ppe != null and ppe.suit_node != null and ppe.gloves_node != null and ppe.boots_node != null, "Missing PpeLocker dynamic PPE nodes")
+		ppe.set_ppe_equipped(true, true, true)
+		assert(not ppe.suit_node.visible and not ppe.gloves_node.visible and not ppe.boots_node.visible)
+		ppe.set_ppe_equipped(false, false, false)
+
+		assert(switchroom.permit_desk != null and switchroom.permit_desk.socket_node != null, "Missing PermitBeaconSocket")
+		assert(switchroom.test_bench != null and switchroom.test_bench.socket_node != null, "Missing ProvingLedSocket")
+		assert(switchroom.key_board != null and switchroom.key_board.socket_node != null, "Missing KeyBoxLedSocket")
+		assert(switchroom.vcb_workbench != null and switchroom.vcb_workbench.find_child("WorkbenchToolsSocket", true, false) != null, "Missing WorkbenchToolsSocket")
+
+		print("Switchroom ready: WatertightDoor pivots, 5 bays, VcbTrolley, PpeLocker & 4 stations verified")
 
 	if toolbelt_props != null:
 		var tool_names: PackedStringArray = []
