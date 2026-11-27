@@ -111,6 +111,11 @@ def build_clean_material_library():
         'lime_cable':   ('LimeEarthCable',         (0.42, 0.78, 0.08), 0.0,  0.42, 0.10, 0.20, 1.0, None, 0.0),
         'cream_paper':  ('PermitPaperCream',       (0.92, 0.90, 0.82), 0.0,  0.80, 0.0,  0.20, 1.0, None, 0.0),
         'mat_rubber':   ('DielectricMatDark',      (0.14, 0.17, 0.20), 0.0,  0.68, 0.0,  0.20, 1.0, None, 0.0),
+        'deck_slate':   ('MarineDeckSlate',        (0.16, 0.18, 0.21), 0.0,  0.54, 0.06, 0.25, 1.0, None, 0.0),
+        'deck_tile':    ('MarineDeckTileSeam',     (0.12, 0.14, 0.16), 0.0,  0.62, 0.0,  0.25, 1.0, None, 0.0),
+        'bulkhead':     ('MarineBulkheadWall',     (0.75, 0.77, 0.79), 0.0,  0.48, 0.08, 0.22, 1.0, None, 0.0),
+        'pipe_grey':    ('MarineAirPipeGrey',      (0.36, 0.42, 0.48), 0.0,  0.38, 0.15, 0.18, 1.0, None, 0.0),
+        'led_panel':    ('MarineLedDiffuser',      (0.95, 0.98, 1.00), 0.0,  0.18, 0.0,  0.10, 1.0, (0.95, 0.98, 1.00), 1.6),
     }
     return {k: _make_clean_mat(*v) for k, v in specs.items()}
 

@@ -122,7 +122,7 @@ Enforced across **every phase** before exporting any `.glb`:
 
 ### Phase 3 — Marine Switchroom Structural Shell, Architecture & Safety Fixtures
 * **User Reference Upload Gate (Upload BEFORE Modeling):**
-  * `assets-src/references/ref-06-safety-fixtures.png` *(covers watertight door, CO₂ extinguisher, 45 kV rescue hook; room shell & piping follow Phase 0 clean material library + existing room dimensions `10.4 m × 9.6 m × 3.45 m`)*
+  * `assets-src/references/ref-06-safety-fixtures.jpg` *(covers watertight door, CO₂ extinguisher, 45 kV rescue hook; room shell & piping follow Phase 0 clean material library + existing room dimensions `10.4 m × 9.6 m × 3.45 m`)*
 * **Tasks:**
   1. Antigravity models/upgrades the complete switchroom shell & fixtures in Blender 5.3 via MCP:
      * `room-shell.glb` (clean marine checkerplate steel deck with crisp diamond tread & zero speckle noise, bulkhead walls + T-bar stiffeners, aft doorway cutout, wall safety plaques).
@@ -130,9 +130,9 @@ Enforced across **every phase** before exporting any `.glb`:
      * Upgrade `watertight-door.glb`, `co2-extinguisher.glb`, `rescue-hook.glb` matching `ref-06` with clean satin enamel, smooth brass/stainless, and pivoted door/handwheel nodes.
   2. Export uncompressed `.glb` files to `godot/assets/models/` and assemble `godot/scenes/room/switchroom.tscn` with Godot collision shapes (`StaticBody3D`), lighting (`DirectionalLight3D` / `OmniLight3D` / `WorldEnvironment` + `switchroom_studio.hdr`), and `NavigationRegion3D`.
 * **Verification Checklist (Phase 3):**
-  * [ ] `ref-06` matched visually; deck floor & bulkhead walls show zero harsh grainy specular artifacts under Godot `Forward+` lighting.
-  * [ ] Switchboard lineup (`Phase 1`) and trolley stops sit flush on the deck at exact world coordinates with zero Z-fighting or wall penetration.
-  * [ ] Watertight door leaf & handwheel pivots rotate cleanly; collision mesh leaves doorway/walkable floor unobstructed.
+  * [x] `ref-06` matched visually (`phase3_safety_preview.png`, `phase3_room_preview.png`); deck floor & bulkhead walls show zero harsh grainy specular artifacts under Godot `Forward+` lighting.
+  * [x] Switchboard lineup (`Phase 1`), dielectric mat, and trolley/wheel stops sit flush on the deck at exact world coordinates with zero Z-fighting or wall penetration.
+  * [x] `WatertightDoor` leaf (`DoorLeafPivot`) & handwheel (`HandwheelPivot`) pivots rotate cleanly; collision mesh leaves doorway/walkable floor unobstructed.
 
 ---
 
