@@ -176,6 +176,6 @@ Enforced across **every phase** before exporting any `.glb`:
   1. Build release Rust GDExtension (`cargo build --release` inside `rust/`).
   2. Configure Godot Windows Desktop export preset (`godot/export_presets.cfg`) and export standalone `.exe` (with `marine_hv_sim.dll` bundled alongside).
 * **Final Verification Checklist:**
-  * [ ] `cargo build --release` exits `0` (`rust/target/release/marine_hv_sim.dll` up to date).
-  * [ ] `Godot_v4.7.2-stable_win64_console.exe --headless --path godot --quit-after 5` loads full `switchroom.tscn` + `HvSimCore` with zero errors or missing resources.
-  * [ ] Exported standalone `.exe` launches cleanly on Windows and renders all Phase 1–5 models with smooth, non-grainy marine PBR materials.
+  * [x] `cargo build --release` exits `0` (`rust/target/release/marine_hv_sim.dll` up to date).
+  * [x] `Godot_v4.7.2-stable_win64_console.exe --headless --path godot --quit-after 5` loads full `switchroom.tscn` + `HvSimCore` with zero errors or missing resources.
+  * [x] Exported standalone `.exe` launches cleanly on Windows and renders all Phase 1–5 models with smooth, non-grainy marine PBR materials.
