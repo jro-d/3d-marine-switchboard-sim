@@ -1,0 +1,47 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/handheld_tool.gd" id="1_tool"]
+[ext_resource type="PackedScene" path="res://assets/models/proving-wand.glb" id="2_wand"]
+[ext_resource type="PackedScene" path="res://assets/models/racking-crank.glb" id="3_crank"]
+[ext_resource type="PackedScene" path="res://assets/models/castell-key.glb" id="4_key"]
+[ext_resource type="PackedScene" path="res://assets/models/loto-padlock.glb" id="5_padlock"]
+[ext_resource type="PackedScene" path="res://assets/models/cme-earth-lead.glb" id="6_cme"]
+[ext_resource type="PackedScene" path="res://assets/models/megger-probes.glb" id="7_megger"]
+[ext_resource type="PackedScene" path="res://assets/models/ptw-clipboard.glb" id="8_ptw"]
+
+[node name="ToolbeltProps" type="Node3D"]
+
+[node name="ProvingWand" parent="." instance=ExtResource("2_wand")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 0.2, 0)
+script = ExtResource("1_tool")
+tool_id = "proving_wand"
+
+[node name="RackingCrank" parent="." instance=ExtResource("3_crank")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8, 0.2, 0)
+script = ExtResource("1_tool")
+tool_id = "racking_handle"
+
+[node name="CastellKey" parent="." instance=ExtResource("4_key")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.45, 0.2, 0)
+script = ExtResource("1_tool")
+tool_id = "castell_key"
+
+[node name="LotoPadlock" parent="." instance=ExtResource("5_padlock")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.15, 0.2, 0)
+script = ExtResource("1_tool")
+tool_id = "padlock"
+
+[node name="CmeEarthLead" parent="." instance=ExtResource("6_cme")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0.2, 0)
+script = ExtResource("1_tool")
+tool_id = "cme_stick"
+
+[node name="MeggerProbes" parent="." instance=ExtResource("7_megger")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.65, 0.2, 0)
+script = ExtResource("1_tool")
+tool_id = "megger_leads"
+
+[node name="PtwClipboard" parent="." instance=ExtResource("8_ptw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.05, 0.2, 0)
+script = ExtResource("1_tool")
+tool_id = "ptw_clipboard"

@@ -107,6 +107,10 @@ def build_clean_material_library():
         'lamp_red':     ('LampRedGlow',            (0.86, 0.10, 0.08), 0.0,  0.20, 0.50, 0.10, 1.0, (0.92, 0.10, 0.08), 1.4),
         'lamp_green':   ('LampGreenGlow',          (0.08, 0.78, 0.28), 0.0,  0.20, 0.50, 0.10, 1.0, (0.08, 0.85, 0.30), 1.4),
         'white_label':  ('LabelWhite',             (0.92, 0.93, 0.94), 0.0,  0.45, 0.0,  0.15, 1.0, None, 0.0),
+        'orange_fg':    ('OrangeFiberglassPole',   (0.88, 0.34, 0.05), 0.0,  0.34, 0.20, 0.16, 1.0, None, 0.0),
+        'lime_cable':   ('LimeEarthCable',         (0.42, 0.78, 0.08), 0.0,  0.42, 0.10, 0.20, 1.0, None, 0.0),
+        'cream_paper':  ('PermitPaperCream',       (0.92, 0.90, 0.82), 0.0,  0.80, 0.0,  0.20, 1.0, None, 0.0),
+        'mat_rubber':   ('DielectricMatDark',      (0.14, 0.17, 0.20), 0.0,  0.68, 0.0,  0.20, 1.0, None, 0.0),
     }
     return {k: _make_clean_mat(*v) for k, v in specs.items()}
 
@@ -226,6 +230,8 @@ class CleanHardSurfaceBuilder:
 
         rings = []
         all_verts = []
+        prev_tangent = None
+        prev_norm = None
         for idx, p in enumerate(pts):
             if closed:
                 tangent = (pts[(idx + 1) % n] - pts[(idx - 1) % n]).normalized()
@@ -237,9 +243,19 @@ class CleanHardSurfaceBuilder:
                 tangent = (pts[idx + 1] - pts[idx - 1]).normalized()
             if tangent.length < 1e-6:
                 tangent = Vector((0, 0, 1))
-            ref = Vector((0, 0, 1)) if abs(tangent.z) < 0.92 else Vector((1, 0, 0))
-            binorm = tangent.cross(ref).normalized()
-            norm = binorm.cross(tangent).normalized()
+
+            if prev_norm is None:
+                ref = Vector((0, 0, 1)) if abs(tangent.z) < 0.90 else Vector((1, 0, 0))
+                binorm = tangent.cross(ref).normalized()
+                norm = binorm.cross(tangent).normalized()
+            else:
+                rot_q = prev_tangent.rotation_difference(tangent)
+                norm = (rot_q @ prev_norm).normalized()
+                norm = (norm - tangent * norm.dot(tangent)).normalized()
+                binorm = tangent.cross(norm).normalized()
+
+            prev_tangent = tangent
+            prev_norm = norm
 
             ring = []
             for s in range(segs):
